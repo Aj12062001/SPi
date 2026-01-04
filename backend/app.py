@@ -77,9 +77,6 @@ ENABLE_SPI_COMPREFACE_BRIDGE = os.getenv("ENABLE_SPI_COMPREFACE_BRIDGE", "false"
 ENABLE_COMPREFACE = os.getenv("ENABLE_COMPREFACE", "false").lower() == "true"
 COMPREFACE_URL = os.getenv("COMPREFACE_URL", "http://localhost:8001")
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
 SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = os.getenv("SMTP_PORT", "")
