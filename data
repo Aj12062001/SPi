@@ -1,0 +1,128 @@
+# Dataset Setup – CERT Insider Threat Dataset
+
+## Overview
+
+This project uses the **CERT Insider Threat Test Dataset** provided by the
+**Software Engineering Institute (SEI), Carnegie Mellon University** for training and evaluating machine learning models.
+
+Due to the **large size**, **licensing restrictions**, and **academic usage policies** of the dataset, it is **not included directly in this GitHub repository**.
+Instead, users are required to download the dataset from the **official source** and place the required files locally.
+
+---
+
+## Official Dataset Source
+
+**CERT Insider Threat Test Dataset (Official Repository):**
+[https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247](https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247)
+
+This is the **only official and trusted source** for the dataset.
+
+
+
+## Required Dataset Files
+
+For this project, only a **small subset** of the CERT dataset is required.
+
+After downloading and extracting `r1.tar.bz2`, ensure the following files are present:
+
+```
+r1/
+├── logon.csv     # User login and logout activity
+├── device.csv    # USB and removable device usage
+├── http.csv      # Web browsing activity
+└── LDAP/         # User and organizational metadata (optional)
+```
+
+These files are sufficient to implement:
+
+* Behavioral analytics
+* Feature extraction
+* Machine learning–based anomaly detection
+
+---
+
+## Why These Files Are Required
+
+| File         | Purpose                                         |
+| ------------ | ----------------------------------------------- |
+| `logon.csv`  | Detect abnormal login times and access patterns |
+| `device.csv` | Identify suspicious USB usage                   |
+| `http.csv`   | Analyze unusual web activity                    |
+| `LDAP/`      | Map users to roles and departments              |
+
+This subset keeps the project **lightweight**, **practical**, and **academically valid**.
+
+---
+
+## Dataset Download Steps
+
+1. Visit the official CMU Kilthub page:
+   [https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247](https://kilthub.cmu.edu/articles/dataset/Insider_Threat_Test_Dataset/12841247)
+
+2. Download:
+
+   * `r1.tar.bz2`
+
+3. Extract the archive:
+
+   ```bash
+   tar -xvjf r1.tar.bz2
+   ```
+
+4. Copy the extracted `r1` folder into:
+
+   ```
+   project_root/data/
+   ```
+
+Final structure:
+
+```
+SPi/
+├── data/
+│   └── r1/
+│       ├── logon.csv
+│       ├── device.csv
+│       ├── http.csv
+│       └── LDAP/
+├── feature_extraction.py
+├── anomaly_detection.py
+└── README.md
+```
+
+---
+
+## Reason for Excluding Dataset from GitHub
+
+* Dataset size exceeds GitHub limits (multiple GB)
+* Academic research usage restrictions
+* Ethical and legal compliance
+* Standard industry and research practice
+
+Including this README ensures the project remains:
+✔ Reproducible
+✔ Ethical
+✔ Exam-safe
+✔ Resume-ready
+
+---
+
+## Citation
+
+If you use this dataset, please cite:
+
+> Carnegie Mellon University, Software Engineering Institute.
+> CERT Insider Threat Test Dataset, 2023.
+
+---
+
+## Note for Evaluators
+
+All experiments, results, and screenshots in this project were generated using the official CERT dataset as described above.
+
+---
+
+## Author
+
+**Ajin Jose**
+Master of Computer Applications (MCA)
