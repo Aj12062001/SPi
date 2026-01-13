@@ -1,0 +1,3 @@
+echo "data/" > .gitignore
+echo "*.csv" >> .gitignore
+echo "__pycache__/" >> .gitignore
