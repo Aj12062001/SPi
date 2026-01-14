@@ -51,12 +51,28 @@ web_features = http.groupby('user').agg(
 print("Web activity features extracted")
 
 # -------------------------------
-# 5. MERGE ALL FEATURES
+# 5. PHYSICAL ACCESS FEATURE EXTRACTION
+# -------------------------------
+
+physical = pd.read_csv("data/physical_access.csv")
+physical['timestamp'] = pd.to_datetime(physical['timestamp'])
+
+physical_features = physical.groupby('user').agg(
+    restricted_zone_access_count=('zone', lambda x: (x == 'restricted').sum()),
+    unauthorized_access_count=('authorized', lambda x: (x == 'no').sum()),
+    face_recognition_failures=('face_recognized', lambda x: (x == 'no').sum())
+).reset_index()
+
+print("Physical features extracted")
+
+# -------------------------------
+# 6. MERGE ALL FEATURES
 # -------------------------------
 
 user_features = login_features \
     .merge(usb_features, on='user', how='left') \
-    .merge(web_features, on='user', how='left')
+    .merge(web_features, on='user', how='left') \
+    .merge(physical_features, on='user', how='left')
 
 # Replace missing values with 0
 user_features.fillna(0, inplace=True)
@@ -64,7 +80,7 @@ user_features.fillna(0, inplace=True)
 print("All features merged")
 
 # -------------------------------
-# 6. SAVE FINAL FEATURE FILE
+# 7. SAVE FINAL FEATURE FILE
 # -------------------------------
 
 user_features.to_csv("user_features.csv", index=False)

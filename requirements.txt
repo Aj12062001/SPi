@@ -3,3 +3,9 @@ scikit-learn
 matplotlib
 seaborn
 streamlit
+opencv-python
+numpy
+Pillow
+kivy
+kivy-garden
+plyer

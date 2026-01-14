@@ -15,7 +15,7 @@ print("\nSummary stats:\n", user_features.describe())
 # 2. SCALE NUMERIC FEATURES
 # -------------------------------
 scaler = MinMaxScaler()
-numeric_cols = ['login_count','after_hours_login','unique_pc_count','usb_usage_count','web_activity_count']
+numeric_cols = ['login_count','after_hours_login','unique_pc_count','usb_usage_count','web_activity_count','restricted_zone_access_count','unauthorized_access_count','face_recognition_failures']
 
 user_features_scaled = user_features.copy()
 user_features_scaled[numeric_cols] = scaler.fit_transform(user_features[numeric_cols])
