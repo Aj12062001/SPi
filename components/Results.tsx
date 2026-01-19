@@ -79,21 +79,30 @@ const Results: React.FC = () => {
     }
   };
 
-  const renderEmployeeTable = (employees: EmployeeRisk[], riskLevel: RiskLevel) => (
+  const handleIndividualSearch = () => {
+    const employee = employeeData.find(emp => 
+      emp.user.toLowerCase() === individualSearch.toLowerCase()
+    );
+    setSelectedEmployee(employee || null);
+  };
+
+  const renderEmployeeTable = (employees: EmployeeRisk[], riskLevel: RiskLevel | null) => (
     <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
       <div className="px-8 py-6 border-b border-slate-700 flex justify-between items-center">
-        <h3 className={`text-xl font-bold ${riskLevel === RiskLevel.LOW ? 'text-green-400' : riskLevel === RiskLevel.MEDIUM ? 'text-yellow-400' : 'text-red-400'}`}>
-          {getRiskTitle(riskLevel)}
+        <h3 className={`text-xl font-bold ${riskLevel === RiskLevel.LOW ? 'text-green-400' : riskLevel === RiskLevel.MEDIUM ? 'text-yellow-400' : riskLevel === RiskLevel.HIGH ? 'text-red-400' : 'text-slate-400'}`}>
+          {riskLevel ? getRiskTitle(riskLevel) : 'All Employees Risk Assessment'}
         </h3>
-        <span className={`text-xs font-bold px-3 py-1 rounded-full border uppercase ${
-          riskLevel === RiskLevel.LOW 
-            ? 'bg-green-900/40 text-green-400 border-green-500/30' 
-            : riskLevel === RiskLevel.MEDIUM 
-              ? 'bg-yellow-900/40 text-yellow-400 border-yellow-500/30' 
-              : 'bg-red-900/40 text-red-400 border-red-500/30'
-        }`}>
-          {getRiskBadge(riskLevel)}
-        </span>
+        {riskLevel && (
+          <span className={`text-xs font-bold px-3 py-1 rounded-full border uppercase ${
+            riskLevel === RiskLevel.LOW 
+              ? 'bg-green-900/40 text-green-400 border-green-500/30' 
+              : riskLevel === RiskLevel.MEDIUM 
+                ? 'bg-yellow-900/40 text-yellow-400 border-yellow-500/30' 
+                : 'bg-red-900/40 text-red-400 border-red-500/30'
+          }`}>
+            {getRiskBadge(riskLevel)}
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
@@ -115,9 +124,15 @@ const Results: React.FC = () => {
                 <td className="px-8 py-5 font-bold text-white">{emp.user}</td>
                 <td className="px-8 py-5">
                   <span className={`font-mono text-lg ${
-                    riskLevel === RiskLevel.LOW ? 'text-green-500' : 
-                    riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' : 
-                    'text-red-500'
+                    riskLevel ? (
+                      riskLevel === RiskLevel.LOW ? 'text-green-500' : 
+                      riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' : 
+                      'text-red-500'
+                    ) : (
+                      getRiskLevel(emp.risk_score) === RiskLevel.LOW ? 'text-green-500' :
+                      getRiskLevel(emp.risk_score) === RiskLevel.MEDIUM ? 'text-yellow-500' :
+                      'text-red-500'
+                    )
                   }`}>
                     {emp.risk_score}
                   </span>
@@ -243,9 +258,9 @@ const Results: React.FC = () => {
           )}
 
           {/* Risk Level Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <button
-              onClick={() => setSelectedRiskLevel(selectedRiskLevel === RiskLevel.LOW ? null : RiskLevel.LOW)}
+              onClick={() => setSelectedRiskLevel(RiskLevel.LOW)}
               className={`p-6 rounded-2xl border-l-4 transition-all ${
                 selectedRiskLevel === RiskLevel.LOW
                   ? 'bg-green-500/10 border-green-500 ring-2 ring-green-500/20'
@@ -257,7 +272,7 @@ const Results: React.FC = () => {
               <p className="text-xs text-slate-500 mt-2">Employees with normal activity</p>
             </button>
             <button
-              onClick={() => setSelectedRiskLevel(selectedRiskLevel === RiskLevel.MEDIUM ? null : RiskLevel.MEDIUM)}
+              onClick={() => setSelectedRiskLevel(RiskLevel.MEDIUM)}
               className={`p-6 rounded-2xl border-l-4 transition-all ${
                 selectedRiskLevel === RiskLevel.MEDIUM
                   ? 'bg-yellow-500/10 border-yellow-500 ring-2 ring-yellow-500/20'
@@ -269,7 +284,7 @@ const Results: React.FC = () => {
               <p className="text-xs text-slate-500 mt-2">Employees requiring monitoring</p>
             </button>
             <button
-              onClick={() => setSelectedRiskLevel(selectedRiskLevel === RiskLevel.HIGH ? null : RiskLevel.HIGH)}
+              onClick={() => setSelectedRiskLevel(RiskLevel.HIGH)}
               className={`p-6 rounded-2xl border-l-4 transition-all ${
                 selectedRiskLevel === RiskLevel.HIGH
                   ? 'bg-red-500/10 border-red-500 ring-2 ring-red-500/20'
@@ -280,23 +295,60 @@ const Results: React.FC = () => {
               <p className="text-3xl font-bold mt-1 text-red-400">{highRiskEmployees.length}</p>
               <p className="text-xs text-slate-500 mt-2">Immediate attention required</p>
             </button>
+            <button
+              onClick={() => setSelectedRiskLevel(null)}
+              className={`p-6 rounded-2xl border-l-4 transition-all ${
+                selectedRiskLevel === null
+                  ? 'bg-slate-500/10 border-slate-500 ring-2 ring-slate-500/20'
+                  : 'bg-slate-800 border-slate-500 hover:bg-slate-700'
+              }`}
+            >
+              <p className="text-sm text-slate-400 font-medium uppercase tracking-wider">All Employees</p>
+              <p className="text-3xl font-bold mt-1 text-slate-400">{employeeData.length}</p>
+              <p className="text-xs text-slate-500 mt-2">View all risk categories</p>
+            </button>
           </div>
 
           {/* Selected Risk Level Table */}
-          {selectedRiskLevel && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold">Showing {selectedRiskLevel} Risk Employees</h3>
-                <button
-                  onClick={() => setSelectedRiskLevel(null)}
-                  className="text-slate-400 hover:text-slate-300 text-sm"
-                >
-                  Clear Selection
-                </button>
-              </div>
-              {renderEmployeeTable(getEmployeesForRiskLevel(selectedRiskLevel), selectedRiskLevel)}
-            </div>
-          )}
+          <div className="space-y-4">
+            {selectedRiskLevel ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-bold">Showing {selectedRiskLevel} Risk Employees</h3>
+                  <button
+                    onClick={() => setSelectedRiskLevel(null)}
+                    className="text-slate-400 hover:text-slate-300 text-sm"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+                {(() => {
+                  const employees = getEmployeesForRiskLevel(selectedRiskLevel);
+                  if (employees.length === 0) {
+                    return (
+                      <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 text-center">
+                        <p className="text-slate-400">No employees found in the {selectedRiskLevel} risk category.</p>
+                      </div>
+                    );
+                  }
+                  return renderEmployeeTable(employees, selectedRiskLevel);
+                })()}
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-bold">All Employees</h3>
+                </div>
+                {employeeData.length === 0 ? (
+                  <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 text-center">
+                    <p className="text-slate-400">No employee data available.</p>
+                  </div>
+                ) : (
+                  renderEmployeeTable(employeeData, null)
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
     </div>
