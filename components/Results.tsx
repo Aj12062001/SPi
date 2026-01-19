@@ -40,11 +40,17 @@ const Results: React.FC = () => {
     }
   };
 
-  const handleIndividualSearch = () => {
-    const employee = employeeData.find(emp => 
-      emp.user.toLowerCase() === individualSearch.toLowerCase()
-    );
-    setSelectedEmployee(employee || null);
+  const getRiskColor = (level: RiskLevel) => {
+    switch (level) {
+      case RiskLevel.LOW:
+        return 'green';
+      case RiskLevel.MEDIUM:
+        return 'yellow';
+      case RiskLevel.HIGH:
+        return 'red';
+      default:
+        return 'slate';
+    }
   };
 
   const getRiskTitle = (level: RiskLevel) => {
@@ -76,8 +82,16 @@ const Results: React.FC = () => {
   const renderEmployeeTable = (employees: EmployeeRisk[], riskLevel: RiskLevel) => (
     <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
       <div className="px-8 py-6 border-b border-slate-700 flex justify-between items-center">
-        <h3 className={`text-xl font-bold text-${getRiskColor(riskLevel)}-400`}>{getRiskTitle(riskLevel)}</h3>
-        <span className={`bg-${getRiskColor(riskLevel)}-900/40 text-${getRiskColor(riskLevel)}-400 text-xs font-bold px-3 py-1 rounded-full border border-${getRiskColor(riskLevel)}-500/30 uppercase`}>
+        <h3 className={`text-xl font-bold ${riskLevel === RiskLevel.LOW ? 'text-green-400' : riskLevel === RiskLevel.MEDIUM ? 'text-yellow-400' : 'text-red-400'}`}>
+          {getRiskTitle(riskLevel)}
+        </h3>
+        <span className={`text-xs font-bold px-3 py-1 rounded-full border uppercase ${
+          riskLevel === RiskLevel.LOW 
+            ? 'bg-green-900/40 text-green-400 border-green-500/30' 
+            : riskLevel === RiskLevel.MEDIUM 
+              ? 'bg-yellow-900/40 text-yellow-400 border-yellow-500/30' 
+              : 'bg-red-900/40 text-red-400 border-red-500/30'
+        }`}>
           {getRiskBadge(riskLevel)}
         </span>
       </div>
@@ -100,7 +114,13 @@ const Results: React.FC = () => {
               <tr key={emp.user} className="hover:bg-slate-800/80 transition-colors">
                 <td className="px-8 py-5 font-bold text-white">{emp.user}</td>
                 <td className="px-8 py-5">
-                  <span className={`text-${getRiskColor(riskLevel)}-500 font-mono text-lg`}>{emp.risk_score}</span>
+                  <span className={`font-mono text-lg ${
+                    riskLevel === RiskLevel.LOW ? 'text-green-500' : 
+                    riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' : 
+                    'text-red-500'
+                  }`}>
+                    {emp.risk_score}
+                  </span>
                 </td>
                 <td className="px-8 py-5 text-slate-300">{emp.login_count}</td>
                 <td className="px-8 py-5 text-slate-300">{emp.night_logins}</td>
