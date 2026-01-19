@@ -115,7 +115,6 @@ const Results: React.FC = () => {
               <th className="px-8 py-4">USB Events</th>
               <th className="px-8 py-4">File Activity</th>
               <th className="px-8 py-4">Anomaly Label</th>
-              <th className="px-8 py-4">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
@@ -145,14 +144,6 @@ const Results: React.FC = () => {
                   <span className={`px-2 py-1 rounded-md text-xs font-bold ${emp.anomaly_label === -1 ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
                     {emp.anomaly_label === -1 ? 'SEVERE OUTLIER' : 'PATTERN MATCH'}
                   </span>
-                </td>
-                <td className="px-8 py-5">
-                  <button 
-                    onClick={() => setSelectedEmployee(emp)}
-                    className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold underline"
-                  >
-                    View Details
-                  </button>
                 </td>
               </tr>
             ))}
@@ -214,7 +205,7 @@ const Results: React.FC = () => {
           {selectedEmployee && (
             <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-indigo-400">Employee Details: {selectedEmployee.user}</h3>
+                <h3 className="text-xl font-bold text-indigo-400">Employee Risk Assessment: {selectedEmployee.user}</h3>
                 <button
                   onClick={() => setSelectedEmployee(null)}
                   className="text-slate-400 hover:text-slate-300"
@@ -224,34 +215,114 @@ const Results: React.FC = () => {
                   </svg>
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Risk Score</p>
-                  <p className={`text-2xl font-bold ${selectedEmployee.risk_score > 50 ? 'text-red-400' : selectedEmployee.risk_score > 25 ? 'text-yellow-400' : 'text-green-400'}`}>
-                    {selectedEmployee.risk_score}
+
+              {/* Risk Level Summary */}
+              <div className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-400 uppercase tracking-wider">Risk Classification</p>
+                    <p className={`text-2xl font-bold ${
+                      getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? 'text-green-400' :
+                      getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? 'text-yellow-400' :
+                      'text-red-400'
+                    }`}>
+                      {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? 'LOW RISK' :
+                       getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? 'MEDIUM RISK' :
+                       'HIGH RISK'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-slate-400 uppercase tracking-wider">Risk Score</p>
+                    <p className={`text-3xl font-bold ${
+                      selectedEmployee.risk_score > 50 ? 'text-red-400' :
+                      selectedEmployee.risk_score > 25 ? 'text-yellow-400' :
+                      'text-green-400'
+                    }`}>
+                      {selectedEmployee.risk_score}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-sm text-slate-300">
+                    {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW
+                      ? 'This employee shows normal behavioral patterns with no significant anomalies detected. Regular monitoring is recommended.'
+                      : getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM
+                      ? 'This employee exhibits some unusual patterns that warrant closer attention. Increased monitoring and investigation may be necessary.'
+                      : 'This employee demonstrates highly suspicious behavior patterns requiring immediate security review and potential intervention.'
+                    }
                   </p>
                 </div>
+              </div>
+
+              {/* Detailed Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Login Count</p>
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">Login Activity</p>
                   <p className="text-2xl font-bold text-white">{selectedEmployee.login_count}</p>
+                  <p className="text-xs text-slate-500 mt-1">Total system logins</p>
                 </div>
                 <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Night Logins</p>
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">Night Activity</p>
                   <p className="text-2xl font-bold text-white">{selectedEmployee.night_logins}</p>
+                  <p className="text-xs text-slate-500 mt-1">Logins during off-hours</p>
                 </div>
                 <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">USB Events</p>
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">USB Usage</p>
                   <p className="text-2xl font-bold text-white">{selectedEmployee.usb_count}</p>
+                  <p className="text-xs text-slate-500 mt-1">USB device connections</p>
                 </div>
                 <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">File Activity</p>
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">File Operations</p>
                   <p className="text-2xl font-bold text-white">{selectedEmployee.file_activity_count}</p>
+                  <p className="text-xs text-slate-500 mt-1">File access/modification events</p>
                 </div>
                 <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Anomaly Status</p>
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">Anomaly Detection</p>
                   <p className={`text-lg font-bold ${selectedEmployee.anomaly_label === -1 ? 'text-orange-400' : 'text-blue-400'}`}>
                     {selectedEmployee.anomaly_label === -1 ? 'SEVERE OUTLIER' : 'NORMAL PATTERN'}
                   </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {selectedEmployee.anomaly_label === -1 ? 'Statistical anomaly detected' : 'Within normal parameters'}
+                  </p>
+                </div>
+                <div className="bg-slate-900 p-4 rounded-xl">
+                  <p className="text-sm text-slate-400 uppercase tracking-wider">Behavioral Insights</p>
+                  <div className="text-sm text-slate-300 mt-1">
+                    {selectedEmployee.night_logins > 10 && 'High off-hours activity • '}
+                    {selectedEmployee.usb_count > 50 && 'Frequent USB usage • '}
+                    {selectedEmployee.file_activity_count > 1000 && 'Intensive file operations • '}
+                    {selectedEmployee.anomaly_label === -1 && 'Anomalous patterns detected'}
+                    {selectedEmployee.night_logins <= 10 && selectedEmployee.usb_count <= 50 && selectedEmployee.file_activity_count <= 1000 && selectedEmployee.anomaly_label !== -1 && 'Normal activity patterns'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommendations */}
+              <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Recommended Actions</p>
+                <div className="text-sm text-slate-300">
+                  {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? (
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Continue standard monitoring protocols</li>
+                      <li>No immediate action required</li>
+                      <li>Include in regular security audits</li>
+                    </ul>
+                  ) : getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? (
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Increase monitoring frequency</li>
+                      <li>Review recent activity logs</li>
+                      <li>Consider additional authentication measures</li>
+                      <li>Schedule security interview if patterns persist</li>
+                    </ul>
+                  ) : (
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Immediate security review required</li>
+                      <li>Temporary access restrictions recommended</li>
+                      <li>Conduct thorough investigation</li>
+                      <li>Consider involving HR and legal teams</li>
+                      <li>Implement enhanced surveillance measures</li>
+                    </ul>
+                  )}
                 </div>
               </div>
             </div>
