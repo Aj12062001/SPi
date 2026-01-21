@@ -93,7 +93,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <img 
               src="images/logo.png" 
               alt="SPi Logo" 
-              className="w-48 h-48 mx-auto relative z-10 drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)] transition-all duration-700 group-hover:scale-110 group-hover:-rotate-2"
+              className="w-48 h-48 mx-auto relative z-10 drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)] transition-all duration-700"
               onError={(e) => { e.currentTarget.src = 'https://cdn-icons-png.flaticon.com/512/2563/2563353.png' }}
             />
           </div>
