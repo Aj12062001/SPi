@@ -1,0 +1,7 @@
+{
+  "name": "SPi: AI-Based Insider Threat Detection",
+  "description": "An enterprise-grade security dashboard for identifying insider threats using behavioral analytics, risk scoring, and computer vision correlation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
