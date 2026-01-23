@@ -26,32 +26,81 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === 'text/csv') {
+    const isCsv = file?.type === 'text/csv' || file?.name.toLowerCase().endsWith('.csv');
+    const isTxtCsv = file?.name.toLowerCase().endsWith('.txt');
+
+    if (file && (isCsv || isTxtCsv)) {
       setSelectedFile(file);
     } else {
-      alert('Please select a valid CSV file.');
+      alert('Please select a valid CSV or TXT file with comma-separated values.');
     }
   };
 
   const parseCSV = (csvText: string): EmployeeRisk[] => {
     const lines = csvText.split('\n').filter(line => line.trim());
-    const headers = lines[0].split(',');
+    if (lines.length <= 1) return [];
+
     const data: EmployeeRisk[] = [];
-    
+    const today = new Date();
+
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
-      if (values.length >= 7) {
-        data.push({
-          user: values[0].trim(),
-          login_count: parseInt(values[1]) || 0,
-          night_logins: parseInt(values[2]) || 0,
-          usb_count: parseInt(values[3]) || 0,
-          file_activity_count: parseInt(values[4]) || 0,
-          anomaly_label: parseInt(values[5]) || 1,
-          risk_score: parseFloat(values[6]) || 0
-        });
-      }
+      if (values.length < 6) continue;
+
+      const user = values[0]?.trim() || `USER_${i.toString().padStart(5, '0')}`;
+      const employee_name = values[1]?.trim() || `Employee ${i}`;
+      const department = values[2]?.trim();
+      const job_title = values[3]?.trim();
+      const date = values[4]?.trim();
+      const login_count = parseInt(values[5]) || 0;
+      const night_logins = parseInt(values[6]) || 0;
+      const unique_pcs = parseInt(values[7]) || 1;
+      const usb_count = parseInt(values[8]) || 0;
+      const file_activity_count = parseInt(values[9]) || 0;
+      const file_deleted = parseInt(values[10]) || 0;
+      const file_copied = parseInt(values[11]) || 0;
+      const file_accessed = parseInt(values[12]) || 0;
+      const emails_sent = parseInt(values[13]) || 0;
+      const external_mails = parseInt(values[14]) || 0;
+      const email_attachments = parseInt(values[15]) || 0;
+      const http_requests = parseInt(values[16]) || 0;
+      const unique_urls = parseInt(values[17]) || 0;
+      const cctv_anomalies = parseInt(values[18]) || 0;
+      const access_card_anomalies = parseInt(values[19]) || 0;
+      const behavioral_score = parseFloat(values[20]) || 50;
+      const anomaly_label = parseInt(values[21]) || 1;
+      const risk_score = parseFloat(values[22]) || 0;
+
+      const day = new Date(today);
+      day.setDate(day.getDate() - (i % 14));
+
+      data.push({
+        user,
+        employee_name,
+        department,
+        job_title,
+        date: date || day.toISOString().slice(0, 10),
+        login_count,
+        night_logins,
+        unique_pcs,
+        usb_count,
+        file_activity_count,
+        file_deleted,
+        file_copied,
+        file_accessed,
+        emails_sent,
+        external_mails,
+        email_attachments,
+        http_requests,
+        unique_urls,
+        cctv_anomalies,
+        access_card_anomalies,
+        behavioral_score,
+        anomaly_label,
+        risk_score
+      });
     }
+
     return data;
   };
 
@@ -105,7 +154,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
             <h3 className="text-xl font-black text-white italic tracking-tight">DATASET <span className="text-indigo-500">.CSV</span></h3>
           </div>
           <div className="relative group/upload border-2 border-dashed border-slate-800 rounded-3xl p-12 text-center hover:bg-slate-950 transition-all cursor-pointer">
-            <input type="file" accept=".csv" className="hidden" id="csv-upload" onChange={handleFileChange} />
+            <input type="file" accept=".csv,.txt" className="hidden" id="csv-upload" onChange={handleFileChange} />
             <label htmlFor="csv-upload" className="cursor-pointer block">
               <div className="bg-slate-900 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover/upload:scale-110 group-hover/upload:rotate-3 transition-all duration-500 border border-slate-800 shadow-xl">
                 <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

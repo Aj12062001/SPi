@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import Header from './Header';
 import Introduction from './Introduction';
 import DataInput from './DataInput';
-import Results from './Results';
+import UnifiedRiskDashboard from './UnifiedRiskDashboard';
 import Analytics from './Analytics';
 
 interface DashboardProps {
@@ -57,7 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({ username, onLogout }) => {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
           {activeTab === 'intro' && <Introduction />}
           {activeTab === 'data' && <DataInput onScanComplete={handleScanComplete} />}
-          {activeTab === 'results' && hasScanned && <Results />}
+          {activeTab === 'results' && hasScanned && <UnifiedRiskDashboard />}
           {activeTab === 'analytics' && hasScanned && <Analytics />}
         </div>
       </main>

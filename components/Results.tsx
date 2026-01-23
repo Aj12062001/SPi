@@ -1,426 +1,341 @@
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useData } from '../DataContext';
 import { EmployeeRisk, RiskLevel } from '../types';
+import ActivityTimeline from './ActivityTimeline';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Results: React.FC = () => {
-  const { employeeData } = useData();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRiskLevel, setSelectedRiskLevel] = useState<RiskLevel | null>(null);
-  const [individualSearch, setIndividualSearch] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeRisk | null>(null);
+  const { employeeData, riskAssessments, activityLogs, getAtRiskUsers, getRiskTrend, getUserActivityStats } = useData();
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'overview' | 'details' | 'activity'>('overview');
 
-  const getRiskLevel = (score: number): RiskLevel => {
-    if (score < 25) return RiskLevel.LOW;
-    if (score >= 25 && score <= 50) return RiskLevel.MEDIUM;
-    return RiskLevel.HIGH;
-  };
+  const atRiskUsers = useMemo(() => getAtRiskUsers(), [getAtRiskUsers]);
+  const riskTrend = useMemo(() => getRiskTrend(7), [getRiskTrend]);
 
-  const filteredData = employeeData.filter(emp => 
-    emp.user.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Risk distribution
+  const riskDistribution = useMemo(() => {
+    const distribution = {
+      [RiskLevel.LOW]: 0,
+      [RiskLevel.MEDIUM]: 0,
+      [RiskLevel.HIGH]: 0,
+      [RiskLevel.CRITICAL]: 0,
+    };
 
-  const highRiskEmployees = employeeData.filter(emp => getRiskLevel(emp.risk_score) === RiskLevel.HIGH);
-  const medRiskEmployees = employeeData.filter(emp => getRiskLevel(emp.risk_score) === RiskLevel.MEDIUM);
-  const lowRiskEmployees = employeeData.filter(emp => getRiskLevel(emp.risk_score) === RiskLevel.LOW);
+    riskAssessments.forEach(assessment => {
+      distribution[assessment.riskLevel]++;
+    });
 
-  const medRiskCount = medRiskEmployees.length;
-  const lowRiskCount = lowRiskEmployees.length;
+    return Object.entries(distribution).map(([level, count]) => ({
+      name: level,
+      value: count,
+    }));
+  }, [riskAssessments]);
 
-  const getEmployeesForRiskLevel = (level: RiskLevel) => {
+  const getRiskLevelColor = (level: RiskLevel): string => {
     switch (level) {
-      case RiskLevel.LOW:
-        return lowRiskEmployees;
-      case RiskLevel.MEDIUM:
-        return medRiskEmployees;
+      case RiskLevel.CRITICAL:
+        return '#d32f2f';
       case RiskLevel.HIGH:
-        return highRiskEmployees;
-      default:
-        return [];
+        return '#f57c00';
+      case RiskLevel.MEDIUM:
+        return '#fbc02d';
+      case RiskLevel.LOW:
+        return '#388e3c';
     }
   };
 
-  const getRiskColor = (level: RiskLevel) => {
-    switch (level) {
-      case RiskLevel.LOW:
-        return 'green';
-      case RiskLevel.MEDIUM:
-        return 'yellow';
-      case RiskLevel.HIGH:
-        return 'red';
-      default:
-        return 'slate';
-    }
-  };
+  const COLORS = ['#388e3c', '#fbc02d', '#f57c00', '#d32f2f'];
 
-  const getRiskTitle = (level: RiskLevel) => {
-    switch (level) {
-      case RiskLevel.LOW:
-        return 'Low Risk Detail Audit';
-      case RiskLevel.MEDIUM:
-        return 'Medium Risk Detail Audit';
-      case RiskLevel.HIGH:
-        return 'High Risk Detail Audit';
-      default:
-        return 'Risk Detail Audit';
-    }
-  };
-
-  const getRiskBadge = (level: RiskLevel) => {
-    switch (level) {
-      case RiskLevel.LOW:
-        return 'Low Risk - Monitor';
-      case RiskLevel.MEDIUM:
-        return 'Medium Risk - Watch';
-      case RiskLevel.HIGH:
-        return 'High Risk - Immediate Attention Required';
-      default:
-        return '';
-    }
-  };
-
-  const handleIndividualSearch = () => {
-    const employee = employeeData.find(emp => 
-      emp.user.toLowerCase() === individualSearch.toLowerCase()
-    );
-    setSelectedEmployee(employee || null);
-  };
-
-  const renderEmployeeTable = (employees: EmployeeRisk[], riskLevel: RiskLevel | null) => (
-    <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
-      <div className="px-8 py-6 border-b border-slate-700 flex justify-between items-center">
-        <h3 className={`text-xl font-bold ${riskLevel === RiskLevel.LOW ? 'text-green-400' : riskLevel === RiskLevel.MEDIUM ? 'text-yellow-400' : riskLevel === RiskLevel.HIGH ? 'text-red-400' : 'text-slate-400'}`}>
-          {riskLevel ? getRiskTitle(riskLevel) : 'All Employees Risk Assessment'}
-        </h3>
-        {riskLevel && (
-          <span className={`text-xs font-bold px-3 py-1 rounded-full border uppercase ${
-            riskLevel === RiskLevel.LOW 
-              ? 'bg-green-900/40 text-green-400 border-green-500/30' 
-              : riskLevel === RiskLevel.MEDIUM 
-                ? 'bg-yellow-900/40 text-yellow-400 border-yellow-500/30' 
-                : 'bg-red-900/40 text-red-400 border-red-500/30'
-          }`}>
-            {getRiskBadge(riskLevel)}
-          </span>
-        )}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left">
-          <thead className="bg-slate-900/50 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-            <tr>
-              <th className="px-8 py-4">Employee ID</th>
-              <th className="px-8 py-4">Risk Score</th>
-              <th className="px-8 py-4">Login Count</th>
-              <th className="px-8 py-4">Night Logins</th>
-              <th className="px-8 py-4">USB Events</th>
-              <th className="px-8 py-4">File Activity</th>
-              <th className="px-8 py-4">Anomaly Label</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700">
-            {employees.map((emp) => (
-              <tr key={emp.user} className="hover:bg-slate-800/80 transition-colors">
-                <td className="px-8 py-5 font-bold text-white">{emp.user}</td>
-                <td className="px-8 py-5">
-                  <span className={`font-mono text-lg ${
-                    riskLevel ? (
-                      riskLevel === RiskLevel.LOW ? 'text-green-500' : 
-                      riskLevel === RiskLevel.MEDIUM ? 'text-yellow-500' : 
-                      'text-red-500'
-                    ) : (
-                      getRiskLevel(emp.risk_score) === RiskLevel.LOW ? 'text-green-500' :
-                      getRiskLevel(emp.risk_score) === RiskLevel.MEDIUM ? 'text-yellow-500' :
-                      'text-red-500'
-                    )
-                  }`}>
-                    {emp.risk_score}
-                  </span>
-                </td>
-                <td className="px-8 py-5 text-slate-300">{emp.login_count}</td>
-                <td className="px-8 py-5 text-slate-300">{emp.night_logins}</td>
-                <td className="px-8 py-5 text-slate-300">{emp.usb_count}</td>
-                <td className="px-8 py-5 text-slate-300">{emp.file_activity_count}</td>
-                <td className="px-8 py-5">
-                  <span className={`px-2 py-1 rounded-md text-xs font-bold ${emp.anomaly_label === -1 ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                    {emp.anomaly_label === -1 ? 'SEVERE OUTLIER' : 'PATTERN MATCH'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  const selectedUserData = selectedUser ? employeeData.find(e => e.user === selectedUser) : null;
+  const selectedUserAssessment = selectedUser ? riskAssessments.get(selectedUser) : null;
+  const selectedUserActivities = selectedUser ? activityLogs.filter(log => log.userId === selectedUser) : [];
+  const userActivityStats = selectedUser ? getUserActivityStats(selectedUser, 24) : null;
 
   return (
-    <div className="space-y-8">
-      {employeeData.length === 0 ? (
-        <div className="bg-slate-800/50 p-12 rounded-2xl border border-slate-700 text-center">
-          <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+    <div style={{ padding: '20px' }} className="results-container">
+      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '20px' }}>🔍 SPI Analysis Results</h1>
+
+      {/* Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid #ddd', paddingBottom: '10px' }}>
+        <button
+          style={{
+            padding: '10px 20px',
+            backgroundColor: viewMode === 'overview' ? '#1976d2' : '#f5f5f5',
+            color: viewMode === 'overview' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+          }}
+          onClick={() => setViewMode('overview')}
+        >
+          📊 Overview
+        </button>
+        <button
+          style={{
+            padding: '10px 20px',
+            backgroundColor: viewMode === 'details' ? '#1976d2' : '#f5f5f5',
+            color: viewMode === 'details' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+          }}
+          onClick={() => setViewMode('details')}
+        >
+          👥 Risk Details
+        </button>
+        <button
+          style={{
+            padding: '10px 20px',
+            backgroundColor: viewMode === 'activity' ? '#1976d2' : '#f5f5f5',
+            color: viewMode === 'activity' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+          }}
+          onClick={() => setViewMode('activity')}
+        >
+          📝 Activity Log
+        </button>
+      </div>
+
+      {/* Overview Tab */}
+      {viewMode === 'overview' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+            {/* Risk Statistics */}
+            <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>📊 Risk Statistics</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Total Users Monitored:</span>
+                  <strong>{employeeData.length}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>At-Risk Users:</span>
+                  <strong style={{ color: '#d32f2f' }}>{atRiskUsers.length}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Total Activities Logged:</span>
+                  <strong>{activityLogs.length}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Anomalies Detected:</span>
+                  <strong style={{ color: '#f57c00' }}>{activityLogs.filter(a => a.isAnomalous).length}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Risk Distribution Pie Chart */}
+            <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Risk Level Distribution</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={riskDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => `${name}: ${value}`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {COLORS.map((color, index) => (
+                      <Cell key={`cell-${index}`} fill={color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <h3 className="text-xl font-bold text-slate-300 mb-2">No Data Available</h3>
-          <p className="text-slate-400 mb-6">Please upload a CSV file in the Data Ingestion tab to view risk assessments.</p>
-          <button
-            onClick={() => window.location.hash = '#data'}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-          >
-            Go to Data Ingestion
-          </button>
+
+          {/* Risk Trend Chart */}
+          <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px', border: '1px solid #e0e0e0', marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>📈 7-Day Risk Trend</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={riskTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="averageRisk" stroke="#1976d2" dot={{ fill: '#1976d2' }} name="Avg Risk Score" isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Top At-Risk Users */}
+          <div style={{ padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>🚨 Top At-Risk Users</h3>
+            <div>
+              {atRiskUsers.slice(0, 10).map((user, index) => {
+                const assessment = riskAssessments.get(user.user);
+                return (
+                  <div
+                    key={user.user}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px',
+                      backgroundColor: index % 2 === 0 ? '#ffffff' : '#fafafa',
+                      borderBottom: '1px solid #e0e0e0',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onClick={() => {
+                      setSelectedUser(user.user);
+                      setViewMode('details');
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f0f0')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#ffffff' : '#fafafa')}
+                  >
+                    <div style={{ width: '30px', height: '30px', backgroundColor: '#1976d2', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', marginRight: '15px' }}>
+                      {index + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold' }}>{user.employee_name || user.user}</div>
+                      <div style={{ fontSize: '12px', color: '#666' }}>{user.user}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '100px', height: '8px', backgroundColor: '#e0e0e0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${(assessment?.overallRiskScore || 0) / 100 * 100}%`,
+                            height: '100%',
+                            backgroundColor: getRiskLevelColor(assessment?.riskLevel || RiskLevel.LOW),
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontWeight: 'bold', color: getRiskLevelColor(assessment?.riskLevel || RiskLevel.LOW) }}>
+                        {assessment?.overallRiskScore.toFixed(1) || '0'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      ) : (
-        <>
-          {/* Individual Employee Search */}
-          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold">Individual Risk Assessment</h3>
-              <p className="text-sm text-slate-400">Search for specific employee by ID or name</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Enter Employee ID (e.g., AAE0190)"
-                  className="bg-slate-900 border border-slate-700 rounded-lg px-10 py-2 w-full text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={individualSearch}
-                  onChange={(e) => setIndividualSearch(e.target.value)}
-                />
-                <svg className="w-5 h-5 text-slate-500 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <button
-                onClick={handleIndividualSearch}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg transition-colors"
-              >
-                Search
-              </button>
-            </div>
-          </div>
+      )}
 
-          {/* Individual Employee Details */}
-          {selectedEmployee && (
-            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-indigo-400">Employee Risk Assessment: {selectedEmployee.user}</h3>
-                <button
-                  onClick={() => setSelectedEmployee(null)}
-                  className="text-slate-400 hover:text-slate-300"
+      {/* Details Tab */}
+      {viewMode === 'details' && (
+        <div>
+          {selectedUserData && selectedUserAssessment ? (
+            <div>
+              <div style={{ marginBottom: '20px' }}>
+                <select
+                  value={selectedUser || ''}
+                  onChange={(e) => setSelectedUser(e.target.value)}
+                  style={{ padding: '10px', fontSize: '14px', borderRadius: '5px', border: '1px solid #ddd' }}
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                  <option value="">Select a user...</option>
+                  {employeeData.map(user => (
+                    <option key={user.user} value={user.user}>
+                      {user.employee_name || user.user}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Risk Level Summary */}
-              <div className="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-400 uppercase tracking-wider">Risk Classification</p>
-                    <p className={`text-2xl font-bold ${
-                      getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? 'text-green-400' :
-                      getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? 'text-yellow-400' :
-                      'text-red-400'
-                    }`}>
-                      {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? 'LOW RISK' :
-                       getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? 'MEDIUM RISK' :
-                       'HIGH RISK'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-slate-400 uppercase tracking-wider">Risk Score</p>
-                    <p className={`text-3xl font-bold ${
-                      selectedEmployee.risk_score > 50 ? 'text-red-400' :
-                      selectedEmployee.risk_score > 25 ? 'text-yellow-400' :
-                      'text-green-400'
-                    }`}>
-                      {selectedEmployee.risk_score}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-slate-300">
-                    {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW
-                      ? 'This employee shows normal behavioral patterns with no significant anomalies detected. Regular monitoring is recommended.'
-                      : getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM
-                      ? 'This employee exhibits some unusual patterns that warrant closer attention. Increased monitoring and investigation may be necessary.'
-                      : 'This employee demonstrates highly suspicious behavior patterns requiring immediate security review and potential intervention.'
-                    }
-                  </p>
+              <div style={{ padding: '20px', backgroundColor: '#f0f4ff', borderRadius: '8px', border: '2px solid #1976d2', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1976d2' }}>{selectedUserData.employee_name || selectedUserData.user}</h2>
+                  <span style={{ padding: '8px 16px', backgroundColor: getRiskLevelColor(selectedUserAssessment.riskLevel), color: 'white', borderRadius: '20px', fontWeight: 'bold', fontSize: '12px' }}>
+                    {selectedUserAssessment.riskLevel}
+                  </span>
                 </div>
               </div>
 
-              {/* Detailed Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Login Activity</p>
-                  <p className="text-2xl font-bold text-white">{selectedEmployee.login_count}</p>
-                  <p className="text-xs text-slate-500 mt-1">Total system logins</p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Night Activity</p>
-                  <p className="text-2xl font-bold text-white">{selectedEmployee.night_logins}</p>
-                  <p className="text-xs text-slate-500 mt-1">Logins during off-hours</p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">USB Usage</p>
-                  <p className="text-2xl font-bold text-white">{selectedEmployee.usb_count}</p>
-                  <p className="text-xs text-slate-500 mt-1">USB device connections</p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">File Operations</p>
-                  <p className="text-2xl font-bold text-white">{selectedEmployee.file_activity_count}</p>
-                  <p className="text-xs text-slate-500 mt-1">File access/modification events</p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Anomaly Detection</p>
-                  <p className={`text-lg font-bold ${selectedEmployee.anomaly_label === -1 ? 'text-orange-400' : 'text-blue-400'}`}>
-                    {selectedEmployee.anomaly_label === -1 ? 'SEVERE OUTLIER' : 'NORMAL PATTERN'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {selectedEmployee.anomaly_label === -1 ? 'Statistical anomaly detected' : 'Within normal parameters'}
-                  </p>
-                </div>
-                <div className="bg-slate-900 p-4 rounded-xl">
-                  <p className="text-sm text-slate-400 uppercase tracking-wider">Behavioral Insights</p>
-                  <div className="text-sm text-slate-300 mt-1">
-                    {selectedEmployee.night_logins > 10 && 'High off-hours activity • '}
-                    {selectedEmployee.usb_count > 50 && 'Frequent USB usage • '}
-                    {selectedEmployee.file_activity_count > 1000 && 'Intensive file operations • '}
-                    {selectedEmployee.anomaly_label === -1 && 'Anomalous patterns detected'}
-                    {selectedEmployee.night_logins <= 10 && selectedEmployee.usb_count <= 50 && selectedEmployee.file_activity_count <= 1000 && selectedEmployee.anomaly_label !== -1 && 'Normal activity patterns'}
+              {/* Risk Assessment Overview */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '30px' }}>
+                {[
+                  { label: 'Overall Risk Score', value: selectedUserAssessment.overallRiskScore.toFixed(2), color: getRiskLevelColor(selectedUserAssessment.riskLevel) },
+                  { label: 'File Activity Risk', value: selectedUserAssessment.fileActivityRisk.toFixed(2), color: '#ff9800' },
+                  { label: 'USB Activity Risk', value: selectedUserAssessment.usbActivityRisk.toFixed(2), color: '#ff5252' },
+                  { label: 'Email Activity Risk', value: selectedUserAssessment.emailActivityRisk.toFixed(2), color: '#42a5f5' },
+                  { label: 'Login Pattern Risk', value: selectedUserAssessment.loginPatternRisk.toFixed(2), color: '#ab47bc' },
+                  { label: 'Behavioral Risk', value: selectedUserAssessment.behavioralRisk.toFixed(2), color: '#29b6f6' },
+                ].map(item => (
+                  <div key={item.label} style={{ padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px', border: `2px solid ${item.color}`, textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>{item.label}</div>
+                    <div style={{ fontSize: '32px', fontWeight: 'bold', color: item.color }}>{item.value}</div>
                   </div>
-                </div>
+                ))}
               </div>
 
               {/* Recommendations */}
-              <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-                <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Recommended Actions</p>
-                <div className="text-sm text-slate-300">
-                  {getRiskLevel(selectedEmployee.risk_score) === RiskLevel.LOW ? (
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>Continue standard monitoring protocols</li>
-                      <li>No immediate action required</li>
-                      <li>Include in regular security audits</li>
-                    </ul>
-                  ) : getRiskLevel(selectedEmployee.risk_score) === RiskLevel.MEDIUM ? (
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>Increase monitoring frequency</li>
-                      <li>Review recent activity logs</li>
-                      <li>Consider additional authentication measures</li>
-                      <li>Schedule security interview if patterns persist</li>
-                    </ul>
-                  ) : (
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>Immediate security review required</li>
-                      <li>Temporary access restrictions recommended</li>
-                      <li>Conduct thorough investigation</li>
-                      <li>Consider involving HR and legal teams</li>
-                      <li>Implement enhanced surveillance measures</li>
-                    </ul>
-                  )}
+              {selectedUserAssessment.recommendations.length > 0 && (
+                <div style={{ padding: '20px', backgroundColor: '#fff3e0', borderRadius: '8px', border: '1px solid #ffb74d', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', color: '#e65100' }}>🎯 Recommendations</h3>
+                  <ul style={{ marginLeft: '20px', color: '#333' }}>
+                    {selectedUserAssessment.recommendations.map((rec, index) => (
+                      <li key={index} style={{ marginBottom: '8px' }}>{rec}</li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
+              )}
+
+              {/* Flagged Activities */}
+              {selectedUserAssessment.flaggedActivities.length > 0 && (
+                <div style={{ padding: '20px', backgroundColor: '#ffebee', borderRadius: '8px', border: '1px solid #ef5350', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', color: '#c62828' }}>⚠️ Flagged Activities ({selectedUserAssessment.flaggedActivities.length})</h3>
+                  <div>
+                    {selectedUserAssessment.flaggedActivities.slice(0, 5).map(activity => (
+                      <div key={activity.id} style={{ display: 'flex', gap: '10px', padding: '8px', borderBottom: '1px solid #ffcdd2' }}>
+                        <span style={{ padding: '4px 8px', backgroundColor: activity.severity === 'critical' ? '#d32f2f' : '#f57c00', color: 'white', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', minWidth: '60px', textAlign: 'center' }}>
+                          {activity.severity.toUpperCase()}
+                        </span>
+                        <span style={{ flex: 1 }}>{activity.activityType.replace(/_/g, ' ')}</span>
+                        <span style={{ color: '#999', fontSize: '12px' }}>{new Date(activity.timestamp).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
+              <p style={{ marginBottom: '20px', color: '#666' }}>Select a user to view details</p>
+              <select
+                value={selectedUser || ''}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                style={{ padding: '10px', fontSize: '14px', borderRadius: '5px', border: '1px solid #ddd', minWidth: '300px' }}
+              >
+                <option value="">Select a user...</option>
+                {employeeData.map(user => (
+                  <option key={user.user} value={user.user}>
+                    {user.employee_name || user.user}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
+        </div>
+      )}
 
-          {/* Risk Level Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <button
-              onClick={() => setSelectedRiskLevel(RiskLevel.LOW)}
-              className={`p-6 rounded-2xl border-l-4 transition-all ${
-                selectedRiskLevel === RiskLevel.LOW
-                  ? 'bg-green-500/10 border-green-500 ring-2 ring-green-500/20'
-                  : 'bg-slate-800 border-green-500 hover:bg-slate-700'
-              }`}
-            >
-              <p className="text-sm text-slate-400 font-medium uppercase tracking-wider">Low Risk</p>
-              <p className="text-3xl font-bold mt-1 text-green-400">{lowRiskCount}</p>
-              <p className="text-xs text-slate-500 mt-2">Employees with normal activity</p>
-            </button>
-            <button
-              onClick={() => setSelectedRiskLevel(RiskLevel.MEDIUM)}
-              className={`p-6 rounded-2xl border-l-4 transition-all ${
-                selectedRiskLevel === RiskLevel.MEDIUM
-                  ? 'bg-yellow-500/10 border-yellow-500 ring-2 ring-yellow-500/20'
-                  : 'bg-slate-800 border-yellow-500 hover:bg-slate-700'
-              }`}
-            >
-              <p className="text-sm text-slate-400 font-medium uppercase tracking-wider">Medium Risk</p>
-              <p className="text-3xl font-bold mt-1 text-yellow-400">{medRiskCount}</p>
-              <p className="text-xs text-slate-500 mt-2">Employees requiring monitoring</p>
-            </button>
-            <button
-              onClick={() => setSelectedRiskLevel(RiskLevel.HIGH)}
-              className={`p-6 rounded-2xl border-l-4 transition-all ${
-                selectedRiskLevel === RiskLevel.HIGH
-                  ? 'bg-red-500/10 border-red-500 ring-2 ring-red-500/20'
-                  : 'bg-slate-800 border-red-500 hover:bg-slate-700'
-              }`}
-            >
-              <p className="text-sm text-slate-400 font-medium uppercase tracking-wider">High Risk</p>
-              <p className="text-3xl font-bold mt-1 text-red-400">{highRiskEmployees.length}</p>
-              <p className="text-xs text-slate-500 mt-2">Immediate attention required</p>
-            </button>
-            <button
-              onClick={() => setSelectedRiskLevel(null)}
-              className={`p-6 rounded-2xl border-l-4 transition-all ${
-                selectedRiskLevel === null
-                  ? 'bg-slate-500/10 border-slate-500 ring-2 ring-slate-500/20'
-                  : 'bg-slate-800 border-slate-500 hover:bg-slate-700'
-              }`}
-            >
-              <p className="text-sm text-slate-400 font-medium uppercase tracking-wider">All Employees</p>
-              <p className="text-3xl font-bold mt-1 text-slate-400">{employeeData.length}</p>
-              <p className="text-xs text-slate-500 mt-2">View all risk categories</p>
-            </button>
-          </div>
-
-          {/* Selected Risk Level Table */}
-          <div className="space-y-4">
-            {selectedRiskLevel ? (
-              <>
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-bold">Showing {selectedRiskLevel} Risk Employees</h3>
-                  <button
-                    onClick={() => setSelectedRiskLevel(null)}
-                    className="text-slate-400 hover:text-slate-300 text-sm"
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-                {(() => {
-                  const employees = getEmployeesForRiskLevel(selectedRiskLevel);
-                  if (employees.length === 0) {
-                    return (
-                      <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 text-center">
-                        <p className="text-slate-400">No employees found in the {selectedRiskLevel} risk category.</p>
-                      </div>
-                    );
-                  }
-                  return renderEmployeeTable(employees, selectedRiskLevel);
-                })()}
-              </>
-            ) : (
-              <>
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-bold">All Employees</h3>
-                </div>
-                {employeeData.length === 0 ? (
-                  <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 text-center">
-                    <p className="text-slate-400">No employee data available.</p>
-                  </div>
-                ) : (
-                  renderEmployeeTable(employeeData, null)
-                )}
-              </>
-            )}
-          </div>
-        </>
+      {/* Activity Log Tab */}
+      {viewMode === 'activity' && (
+        <div>
+          {selectedUser ? (
+            <>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>Activity for {selectedUserData?.employee_name || selectedUser}</h2>
+              <ActivityTimeline activities={selectedUserActivities} />
+            </>
+          ) : (
+            <>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>All Activity Logs</h2>
+              <ActivityTimeline activities={activityLogs} />
+            </>
+          )}
+        </div>
       )}
     </div>
   );

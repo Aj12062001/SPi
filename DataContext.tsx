@@ -1,28 +1,77 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { EmployeeRisk } from './types';
+import { EmployeeRisk, RiskAssessment, ActivityLog } from './types';
+import { generateRiskAssessment, identifyAtRiskUsers, calculateRiskTrend } from './utils/riskAnalysis';
+import { getActivityStats } from './utils/activityTracker';
 
-const MOCK_EMPLOYEE_DATA: EmployeeRisk[] = [
-  { user: "AAE0190", login_count: 385, night_logins: 0, usb_count: 0, file_activity_count: 0, anomaly_label: 1, risk_score: 64.02 },
-  { user: "AAF0535", login_count: 328, night_logins: 0, usb_count: 346, file_activity_count: 357, anomaly_label: 1, risk_score: 77.37 },
-  { user: "ABC0174", login_count: 649, night_logins: 0, usb_count: 642, file_activity_count: 589, anomaly_label: 1, risk_score: 78.63 },
-  { user: "ACC0042", login_count: 1510, night_logins: 455, usb_count: 0, file_activity_count: 0, anomaly_label: 1, risk_score: 92.46 },
-  { user: "AJF0370", login_count: 1816, night_logins: 485, usb_count: 4261, file_activity_count: 11053, anomaly_label: -1, risk_score: 113.38 },
-  { user: "AIB0948", login_count: 649, night_logins: 0, usb_count: 2990, file_activity_count: 1669, anomaly_label: 1, risk_score: 95.32 },
-  { user: "BJM0111", login_count: 481, night_logins: 42, usb_count: 2919, file_activity_count: 7841, anomaly_label: -1, risk_score: 102.47 },
-  { user: "CCA0046", login_count: 1540, night_logins: 452, usb_count: 758, file_activity_count: 1678, anomaly_label: -1, risk_score: 103.61 },
-  { user: "AIP0982", login_count: 559, night_logins: 0, usb_count: 366, file_activity_count: 6182, anomaly_label: 1, risk_score: 95.57 },
-  { user: "ANM0123", login_count: 82, night_logins: 0, usb_count: 29, file_activity_count: 47, anomaly_label: 1, risk_score: 18.31 },
-  { user: "ZSL0305", login_count: 385, night_logins: 0, usb_count: 0, file_activity_count: 0, anomaly_label: 1, risk_score: 24.02 },
-  { user: "LOW0001", login_count: 100, night_logins: 0, usb_count: 0, file_activity_count: 5, anomaly_label: 1, risk_score: 12.50 },
-  { user: "MED0001", login_count: 400, night_logins: 5, usb_count: 2, file_activity_count: 50, anomaly_label: 1, risk_score: 35.20 },
-  { user: "GTD0219", login_count: 980, night_logins: 316, usb_count: 479, file_activity_count: 1281, anomaly_label: -1, risk_score: 101.53 },
-  { user: "BSS0369", login_count: 1924, night_logins: 538, usb_count: 2740, file_activity_count: 2295, anomaly_label: -1, risk_score: 110.4 },
-  { user: "HPH0075", login_count: 632, night_logins: 0, usb_count: 3180, file_activity_count: 9323, anomaly_label: 1, risk_score: 100.0 }
+// Compact mock data aligned to upload schema
+const ENHANCED_EMPLOYEE_DATA: EmployeeRisk[] = [
+  {
+    user: "AAE0190",
+    employee_name: "August Armando Evans",
+    date: "2024-11-10",
+    login_count: 385,
+    night_logins: 12,
+    usb_count: 24,
+    file_activity_count: 640,
+    anomaly_label: 1,
+    risk_score: 64.02
+  },
+  {
+    user: "AAF0535",
+    employee_name: "Anna Anderson",
+    date: "2024-11-11",
+    login_count: 328,
+    night_logins: 5,
+    usb_count: 346,
+    file_activity_count: 357,
+    anomaly_label: -1,
+    risk_score: 77.37
+  },
+  {
+    user: "ABC0174",
+    employee_name: "Bob Clarke",
+    date: "2024-11-12",
+    login_count: 649,
+    night_logins: 8,
+    usb_count: 642,
+    file_activity_count: 589,
+    anomaly_label: -1,
+    risk_score: 78.63
+  },
+  {
+    user: "ACC0042",
+    employee_name: "Chandra Costa",
+    date: "2024-11-13",
+    login_count: 1510,
+    night_logins: 455,
+    usb_count: 72,
+    file_activity_count: 124,
+    anomaly_label: 1,
+    risk_score: 92.46
+  },
+  {
+    user: "LOW0001",
+    employee_name: "Low Baseline",
+    date: "2024-11-14",
+    login_count: 100,
+    night_logins: 0,
+    usb_count: 0,
+    file_activity_count: 5,
+    anomaly_label: 1,
+    risk_score: 12.5
+  }
 ];
 
 interface DataContextType {
   employeeData: EmployeeRisk[];
   setEmployeeData: (data: EmployeeRisk[]) => void;
+  riskAssessments: Map<string, RiskAssessment>;
+  activityLogs: ActivityLog[];
+  logUserActivity: (activity: Omit<ActivityLog, 'id' | 'timestamp'>) => void;
+  getEmployeeRiskAssessment: (userId: string) => RiskAssessment | null;
+  getAtRiskUsers: () => EmployeeRisk[];
+  getRiskTrend: (days?: number) => any[];
+  getUserActivityStats: (userId: string, hours?: number) => any;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -36,27 +85,103 @@ export const useData = () => {
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [employeeData, setEmployeeData] = useState<EmployeeRisk[]>(MOCK_EMPLOYEE_DATA);
+  const [employeeData, setEmployeeDataState] = useState<EmployeeRisk[]>(ENHANCED_EMPLOYEE_DATA);
+  const [riskAssessments, setRiskAssessments] = useState<Map<string, RiskAssessment>>(new Map());
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
+  // Load data from localStorage on mount
   useEffect(() => {
-    // Load from localStorage if available
-    const stored = localStorage.getItem('employeeData');
-    if (stored) {
+    const storedEmployees = localStorage.getItem('employeeData');
+    const storedActivities = localStorage.getItem('activityLogs');
+
+    if (storedEmployees) {
       try {
-        setEmployeeData(JSON.parse(stored));
+        setEmployeeDataState(JSON.parse(storedEmployees));
       } catch (error) {
-        console.error('Error loading stored data:', error);
+        console.error('Error loading employee data:', error);
       }
     }
+
+    if (storedActivities) {
+      try {
+        setActivityLogs(JSON.parse(storedActivities));
+      } catch (error) {
+        console.error('Error loading activity logs:', error);
+      }
+    }
+
+    // Generate initial risk assessments
+    generateAssessments(employeeData);
   }, []);
 
-  const updateData = (data: EmployeeRisk[]) => {
-    setEmployeeData(data);
+  // Update risk assessments when employee data changes
+  useEffect(() => {
+    generateAssessments(employeeData);
+  }, [employeeData]);
+
+  const generateAssessments = (employees: EmployeeRisk[]) => {
+    const newAssessments = new Map<string, RiskAssessment>();
+    employees.forEach(emp => {
+      const assessment = generateRiskAssessment(emp, activityLogs);
+      newAssessments.set(emp.user, assessment);
+    });
+    setRiskAssessments(newAssessments);
+  };
+
+  const setEmployeeData = (data: EmployeeRisk[]) => {
+    setEmployeeDataState(data);
     localStorage.setItem('employeeData', JSON.stringify(data));
   };
 
+  const logUserActivity = (activity: Omit<ActivityLog, 'id' | 'timestamp'>) => {
+    const newActivity: ActivityLog = {
+      ...activity,
+      id: `activity_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updatedLogs = [...activityLogs, newActivity];
+    setActivityLogs(updatedLogs);
+    localStorage.setItem('activityLogs', JSON.stringify(updatedLogs));
+
+    // Update risk assessment for this user
+    const emp = employeeData.find(e => e.user === activity.userId);
+    if (emp) {
+      const assessment = generateRiskAssessment(emp, updatedLogs);
+      setRiskAssessments(prev => new Map(prev).set(emp.user, assessment));
+    }
+  };
+
+  const getEmployeeRiskAssessment = (userId: string): RiskAssessment | null => {
+    return riskAssessments.get(userId) || null;
+  };
+
+  const getAtRiskUsers = (): EmployeeRisk[] => {
+    return identifyAtRiskUsers(employeeData, 60);
+  };
+
+  const getRiskTrend = (days: number = 7) => {
+    return calculateRiskTrend(employeeData, days);
+  };
+
+  const getUserActivityStats = (userId: string, hours: number = 24) => {
+    return getActivityStats(userId, hours);
+  };
+
   return (
-    <DataContext.Provider value={{ employeeData, setEmployeeData: updateData }}>
+    <DataContext.Provider
+      value={{
+        employeeData,
+        setEmployeeData,
+        riskAssessments,
+        activityLogs,
+        logUserActivity,
+        getEmployeeRiskAssessment,
+        getAtRiskUsers,
+        getRiskTrend,
+        getUserActivityStats,
+      }}
+    >
       {children}
     </DataContext.Provider>
   );
