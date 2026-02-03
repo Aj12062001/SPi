@@ -6,7 +6,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 const RiskManagement: React.FC = () => {
   const { employeeData, riskAssessments } = useData();
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
-  const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'critical'>('all');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
 
   // Unique departments
   const departments = useMemo(() => {
@@ -22,27 +22,30 @@ const RiskManagement: React.FC = () => {
       const riskMatch = 
         riskFilter === 'all' ||
         (riskFilter === 'high' && assessment && assessment.riskLevel === RiskLevel.HIGH) ||
-        (riskFilter === 'critical' && assessment && assessment.riskLevel === RiskLevel.CRITICAL);
+        (riskFilter === 'medium' && assessment && assessment.riskLevel === RiskLevel.MEDIUM) ||
+        (riskFilter === 'low' && assessment && assessment.riskLevel === RiskLevel.LOW);
       return deptMatch && riskMatch;
     });
   }, [employeeData, riskAssessments, selectedDept, riskFilter]);
 
   // Department risk summary
   const deptRiskSummary = useMemo(() => {
-    const summary: Record<string, { total: number; high: number; critical: number; avgRisk: number }> = {};
+    const summary: Record<string, { total: number; high: number; medium: number; low: number; avgRisk: number }> = {};
     
     employeeData.forEach(emp => {
       const dept = emp.department || 'Unknown';
       const assessment = riskAssessments.get(emp.user);
       const isHigh = assessment?.riskLevel === RiskLevel.HIGH;
-      const isCritical = assessment?.riskLevel === RiskLevel.CRITICAL;
+      const isMedium = assessment?.riskLevel === RiskLevel.MEDIUM;
+      const isLow = assessment?.riskLevel === RiskLevel.LOW;
       
       if (!summary[dept]) {
-        summary[dept] = { total: 0, high: 0, critical: 0, avgRisk: 0 };
+        summary[dept] = { total: 0, high: 0, medium: 0, low: 0, avgRisk: 0 };
       }
       summary[dept].total++;
       if (isHigh) summary[dept].high++;
-      if (isCritical) summary[dept].critical++;
+      if (isMedium) summary[dept].medium++;
+      if (isLow) summary[dept].low++;
       summary[dept].avgRisk += assessment?.overallRiskScore || 0;
     });
 
@@ -50,7 +53,8 @@ const RiskManagement: React.FC = () => {
       name,
       total: data.total,
       high: data.high,
-      critical: data.critical,
+      medium: data.medium,
+      low: data.low,
       avgRisk: Math.round(data.avgRisk / data.total)
     }));
   }, [employeeData, riskAssessments]);
@@ -122,15 +126,14 @@ const RiskManagement: React.FC = () => {
       dept: dept.name,
       avgLogins: Math.round(Math.random() * 150 + 50),
       nightLogins: Math.round(Math.random() * 20 + 5),
-      risk: dept.critical + dept.high
+      risk: dept.high + dept.medium
     }));
   }, [deptRiskSummary]);
 
   const RISK_COLORS = {
     [RiskLevel.LOW]: '#10b981',
     [RiskLevel.MEDIUM]: '#f59e0b',
-    [RiskLevel.HIGH]: '#ef5350',
-    [RiskLevel.CRITICAL]: '#d32f2f'
+    [RiskLevel.HIGH]: '#ef4444'
   };
 
   return (
@@ -143,21 +146,21 @@ const RiskManagement: React.FC = () => {
           <p className="text-xs text-slate-400 mt-2">Monitored & Analyzed</p>
         </div>
         <div className="bg-gradient-to-br from-red-500/20 to-red-600/10 p-6 rounded-2xl border border-red-500/30">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Critical Risk</p>
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">🔴 High Risk</p>
           <p className="text-4xl font-bold text-red-400 mt-2">
-            {Array.from(riskAssessments.values() as Array<any>).filter(a => a.riskLevel === RiskLevel.CRITICAL).length}
-          </p>
-          <p className="text-xs text-slate-400 mt-2">Immediate Action Required</p>
-        </div>
-        <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/10 p-6 rounded-2xl border border-orange-500/30">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">High Risk</p>
-          <p className="text-4xl font-bold text-orange-400 mt-2">
             {Array.from(riskAssessments.values() as Array<any>).filter(a => a.riskLevel === RiskLevel.HIGH).length}
           </p>
-          <p className="text-xs text-slate-400 mt-2">Enhanced Monitoring</p>
+          <p className="text-xs text-slate-400 mt-2">Requires Investigation</p>
+        </div>
+        <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/10 p-6 rounded-2xl border border-amber-500/30">
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">🟡 Medium Risk</p>
+          <p className="text-4xl font-bold text-amber-400 mt-2">
+            {Array.from(riskAssessments.values() as Array<any>).filter(a => a.riskLevel === RiskLevel.MEDIUM).length}
+          </p>
+          <p className="text-xs text-slate-400 mt-2">Monitor Closely</p>
         </div>
         <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 p-6 rounded-2xl border border-emerald-500/30">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Low Risk</p>
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-wide">🟢 Low Risk</p>
           <p className="text-4xl font-bold text-emerald-400 mt-2">
             {Array.from(riskAssessments.values() as Array<any>).filter(a => a.riskLevel === RiskLevel.LOW).length}
           </p>
@@ -189,7 +192,8 @@ const RiskManagement: React.FC = () => {
           >
             <option value="all">All Employees</option>
             <option value="high">High Risk Only</option>
-            <option value="critical">Critical Risk Only</option>
+            <option value="medium">Medium Risk Only</option>
+            <option value="low">Low Risk Only</option>
           </select>
         </div>
       </div>

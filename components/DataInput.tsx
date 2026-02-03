@@ -37,126 +37,261 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
   };
 
   const parseCSV = (csvText: string): EmployeeRisk[] => {
-    const lines = csvText.split('\n').filter(line => line.trim());
-    if (lines.length <= 1) return [];
-
-    const headers = lines[0].split(',').map(h => h.trim());
-    const data: EmployeeRisk[] = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',');
-      if (values.length < 6) continue;
-
-      const row: any = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index]?.trim() || '';
-      });
-
-      // Map the CSV columns to EmployeeRisk interface
-      const employee: EmployeeRisk = {
-        user: row.user_id || row.user || `USER_${i.toString().padStart(5, '0')}`,
-        user_id: row.user_id || row.user,
-        employee_name: row.employee_name || `Employee ${i}`,
-        department: row.department,
-        job_title: row.job_title,
-        date: row.date,
-        login_count: parseInt(row.login_count) || 0,
-        night_logins: parseInt(row.night_logins) || 0,
-        unique_pcs: parseInt(row.unique_pcs) || 1,
-        
-        // Session tracking
-        session_duration_total: parseFloat(row.session_duration_total) || 0,
-        session_duration_avg: parseFloat(row.session_duration_avg) || 0,
-        
-        // USB activity
-        usb_count: parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0,
-        usb_connect: parseInt(row.usb_connect) || 0,
-        usb_disconnect: parseInt(row.usb_disconnect) || 0,
-        
-        // File operations
-        file_activity_count: parseInt(row.total_file_operations) || parseInt(row.file_activity_count) || 0,
-        file_opened: parseInt(row.file_opened) || 0,
-        file_copied: parseInt(row.file_copied) || 0,
-        file_deleted: parseInt(row.file_deleted) || 0,
-        file_downloaded: parseInt(row.file_downloaded) || 0,
-        file_uploaded: parseInt(row.file_uploaded) || 0,
-        file_edited: parseInt(row.file_edited) || 0,
-        total_file_operations: parseInt(row.total_file_operations) || 0,
-        sensitive_files_accessed: parseInt(row.sensitive_files_accessed) || 0,
-        unique_files_accessed: parseInt(row.unique_files_accessed) || 0,
-        systems_accessed: row.systems_accessed || '',
-        file_operations_detail: row.file_operations_detail || '',
-        
-        // Email activity
-        emails_sent: parseInt(row.emails_sent) || 0,
-        external_mails: parseInt(row.external_mails) || 0,
-        email_attachments: parseInt(row.email_attachments) || 0,
-        avg_email_size: parseFloat(row.avg_email_size) || 0,
-        
-        // Web activity
-        http_requests: parseInt(row.http_requests) || 0,
-        unique_urls: parseInt(row.unique_urls) || 0,
-        
-        // Other attributes
-        cctv_anomalies: parseInt(row.cctv_anomalies) || 0,
-        access_card_anomalies: parseInt(row.access_card_anomalies) || 0,
-        behavioral_score: parseFloat(row.behavioral_score) || 50,
-        anomaly_label: parseInt(row.anomaly_label) || 1,
-        risk_score: parseFloat(row.risk_score) || 0,
-        risk_profile: row.risk_profile,
-        
-        // Legacy compatibility
-        logoff_count: parseInt(row.logoff_count) || parseInt(row.login_count) || 0,
-        file_accessed: parseInt(row.file_accessed) || 0,
-        file_events: parseInt(row.file_events) || 0,
-        unique_files: parseInt(row.unique_files) || 0,
-        avg_filename_length: parseFloat(row.avg_filename_length) || 0,
-        attachments: parseInt(row.attachments) || 0,
-        O: parseInt(row.O) || 0,
-        C: parseInt(row.C) || 0,
-        E: parseInt(row.E) || 0,
-        A: parseInt(row.A) || 0,
-        N: parseInt(row.N) || 0,
-      };
-
-      data.push(employee);
+    if (!csvText || csvText.trim().length === 0) {
+      console.error('❌ CSV text is empty');
+      return [];
     }
 
+    const lines = csvText.split('\n').filter((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed && idx === 0) return true;
+      return trimmed.length > 0;
+    });
+
+    console.log('📋 Total lines in CSV:', lines.length);
+
+    if (lines.length <= 1) {
+      console.error('❌ CSV has no data rows (only header or empty)');
+      return [];
+    }
+
+    const headers = parseCSVLine(lines[0]);
+    console.log('📋 Headers parsed:', headers.length, 'columns');
+    
+    // Group rows by user_id to handle multi-day data
+    const employeeMap = new Map<string, any>();
+    let skippedRows = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      try {
+        const values = parseCSVLine(line);
+        
+        if (values.length < Math.max(6, headers.length * 0.4)) {
+          skippedRows++;
+          continue;
+        }
+
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+
+        const userId = row.user_id || row.user;
+        if (!userId || userId.trim().length === 0) {
+          skippedRows++;
+          continue;
+        }
+
+        // If user already exists, aggregate numeric values
+        if (employeeMap.has(userId)) {
+          const existing = employeeMap.get(userId);
+          existing.login_count = (existing.login_count || 0) + (parseInt(row.login_count) || 0);
+          existing.night_logins = (existing.night_logins || 0) + (parseInt(row.night_logins) || 0);
+          existing.usb_count = (existing.usb_count || 0) + (parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0);
+          existing.file_activity_count = (existing.file_activity_count || 0) + (parseInt(row.total_file_operations) || 0);
+          existing.emails_sent = (existing.emails_sent || 0) + (parseInt(row.emails_sent) || 0);
+          existing.external_mails = (existing.external_mails || 0) + (parseInt(row.external_mails) || 0);
+          existing.http_requests = (existing.http_requests || 0) + (parseInt(row.http_requests) || 0);
+        } else {
+          // Create new employee entry
+          employeeMap.set(userId, {
+            user: userId,
+            user_id: userId,
+            employee_name: row.employee_name || `Employee ${userId}`,
+            department: row.department,
+            job_title: row.job_title,
+            date: row.date,
+            login_count: parseInt(row.login_count) || 0,
+            night_logins: parseInt(row.night_logins) || 0,
+            unique_pcs: parseInt(row.unique_pcs) || 1,
+            session_duration_total: parseFloat(row.session_duration_total) || 0,
+            session_duration_avg: parseFloat(row.session_duration_avg) || 0,
+            usb_count: parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0,
+            usb_connect: parseInt(row.usb_connect) || 0,
+            usb_disconnect: parseInt(row.usb_disconnect) || 0,
+            file_activity_count: parseInt(row.total_file_operations) || parseInt(row.file_activity_count) || 0,
+            file_opened: parseInt(row.file_opened) || 0,
+            file_copied: parseInt(row.file_copied) || 0,
+            file_deleted: parseInt(row.file_deleted) || 0,
+            file_downloaded: parseInt(row.file_downloaded) || 0,
+            file_uploaded: parseInt(row.file_uploaded) || 0,
+            file_edited: parseInt(row.file_edited) || 0,
+            total_file_operations: parseInt(row.total_file_operations) || 0,
+            sensitive_files_accessed: parseInt(row.sensitive_files_accessed) || 0,
+            unique_files_accessed: parseInt(row.unique_files_accessed) || 0,
+            systems_accessed: row.systems_accessed || '',
+            file_operations_detail: row.file_operations_detail || '',
+            emails_sent: parseInt(row.emails_sent) || 0,
+            external_mails: parseInt(row.external_mails) || 0,
+            email_attachments: parseInt(row.email_attachments) || 0,
+            avg_email_size: parseFloat(row.avg_email_size) || 0,
+            http_requests: parseInt(row.http_requests) || 0,
+            unique_urls: parseInt(row.unique_urls) || 0,
+            cctv_anomalies: parseInt(row.cctv_anomalies) || 0,
+            access_card_anomalies: parseInt(row.access_card_anomalies) || 0,
+            behavioral_score: parseFloat(row.behavioral_score) || 50,
+            anomaly_label: parseInt(row.anomaly_label) || 1,
+            risk_score: parseFloat(row.risk_score) || 0,
+            risk_profile: row.risk_profile,
+            logoff_count: parseInt(row.logoff_count) || parseInt(row.login_count) || 0,
+            file_accessed: parseInt(row.file_accessed) || 0,
+            file_events: parseInt(row.file_events) || 0,
+            unique_files: parseInt(row.unique_files) || 0,
+            avg_filename_length: parseFloat(row.avg_filename_length) || 0,
+            attachments: parseInt(row.attachments) || 0,
+            O: parseInt(row.O) || 0,
+            C: parseInt(row.C) || 0,
+            E: parseInt(row.E) || 0,
+            A: parseInt(row.A) || 0,
+            N: parseInt(row.N) || 0,
+          });
+        }
+      } catch (error) {
+        skippedRows++;
+      }
+    }
+
+    const data = Array.from(employeeMap.values());
+    console.log(`✅ Parsing complete: ${data.length} unique employees from ${lines.length - 1} rows`);
     return data;
   };
 
+  // Proper CSV line parser that handles quoted fields
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+
+    // Add the last field
+    result.push(current.trim());
+    
+    // Remove surrounding quotes from fields if they exist
+    return result.map(field => {
+      if (field.startsWith('"') && field.endsWith('"')) {
+        return field.slice(1, -1);
+      }
+      return field;
+    });
+  };
+
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      alert('Please select a file first');
+      return;
+    }
+
+    // Check file size before attempting to read
+    if (selectedFile.size === 0) {
+      console.error('❌ Selected file is empty (0 bytes)');
+      alert('The selected file is empty (0 bytes). Please choose a valid CSV file with data.');
+      setUploading(false);
+      return;
+    }
+
+    console.log('✅ File selected:', selectedFile.name, 'Size:', selectedFile.size, 'bytes');
 
     setUploading(true);
     setProgress(0);
     setStatusText(scanStates[0]);
 
     try {
-      const text = await selectedFile.text();
-      const parsedData = parseCSV(text);
+      // Use FileReader with ArrayBuffer for large files
+      const reader = new FileReader();
       
-      // Simulate processing
-      let p = 0;
-      const interval = setInterval(() => {
-        p += 2;
-        setProgress(p);
-        
-        const statusIdx = Math.min(Math.floor((p / 100) * scanStates.length), scanStates.length - 1);
-        setStatusText(scanStates[statusIdx]);
+      reader.onload = (event) => {
+        try {
+          const buffer = event.target?.result as ArrayBuffer;
+          const byteLength = buffer?.byteLength || 0;
 
-        if (p >= 100) {
-          clearInterval(interval);
-          setEmployeeData(parsedData);
-          setTimeout(() => {
+          if (!buffer || byteLength === 0) {
+            console.error('❌ File content is empty');
+            alert('File appears to be empty. Please check the CSV file.');
             setUploading(false);
-            setSelectedFile(null);
-            onScanComplete();
-          }, 800);
+            return;
+          }
+
+          const text = new TextDecoder('utf-8').decode(buffer);
+          console.log('📄 CSV file loaded, size:', text.length, 'bytes');
+
+          const parsedData = parseCSV(text);
+          console.log('✅ CSV parsed successfully:', parsedData.length, 'employees');
+
+          if (parsedData.length === 0) {
+            console.error('❌ No data parsed from CSV');
+            alert('No valid data found in CSV. Please check the format.');
+            setUploading(false);
+            return;
+          }
+
+          // Log first and last employee to verify parsing
+          console.log('📊 First employee:', parsedData[0]);
+          console.log('📊 Last employee:', parsedData[parsedData.length - 1]);
+
+          // Simulate processing
+          let p = 0;
+          const interval = setInterval(() => {
+            p += 2;
+            setProgress(p);
+
+            const statusIdx = Math.min(Math.floor((p / 100) * scanStates.length), scanStates.length - 1);
+            setStatusText(scanStates[statusIdx]);
+
+            if (p >= 100) {
+              clearInterval(interval);
+              console.log('💾 Setting employee data in context with', parsedData.length, 'records');
+              console.log('⏳ Risk assessments will be generated in batches...');
+              setEmployeeData(parsedData);
+              // Switch to results immediately
+              setTimeout(() => {
+                console.log('✅ Switching to Risk Assessment tab');
+                setUploading(false);
+                setSelectedFile(null);
+                onScanComplete();
+              }, 300);
+            }
+          }, 80);
+        } catch (error) {
+          console.error('❌ Error in FileReader onload:', error);
+          setUploading(false);
+          alert('Error processing the file: ' + (error as any).message);
         }
-      }, 80);
+      };
+
+      reader.onerror = (error) => {
+        console.error('❌ FileReader error:', error);
+        setUploading(false);
+        alert('Error reading file: ' + error);
+      };
+
+      console.log('📖 Starting FileReader...');
+      reader.readAsArrayBuffer(selectedFile);
     } catch (error) {
-      console.error('Error parsing CSV:', error);
+      console.error('❌ Error setting up file read:', error);
       setUploading(false);
       alert('Error processing the file. Please check the format.');
     }
@@ -215,7 +350,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
         </div>
       </div>
 
-      <div className="flex flex-col items-center pt-4">
+      <div className="flex flex-col items-center pt-4 gap-4">
         {uploading ? (
           <div className="w-full max-w-2xl bg-slate-900/80 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl space-y-6">
             <div className="flex justify-between items-end">

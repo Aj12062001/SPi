@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useData } from '../DataContext';
 import { EmployeeRisk, RiskLevel } from '../types';
 import ActivityTimeline from './ActivityTimeline';
+import ActivityVisualization from './ActivityVisualization';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, ComposedChart, Area, AreaChart
@@ -10,21 +11,31 @@ import {
 const UnifiedRiskDashboard: React.FC = () => {
   const { employeeData, riskAssessments, activityLogs, getRiskTrend, getUserActivityStats } = useData();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [selectedRiskFilter, setSelectedRiskFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
+  const [selectedRiskFilter, setSelectedRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [viewMode, setViewMode] = useState<'overview' | 'details' | 'activity'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchField, setSearchField] = useState<'all' | 'id' | 'name' | 'department'>('all');
 
   // Risk counts
   const riskCounts = useMemo(() => {
-    let critical = 0, high = 0, medium = 0, low = 0;
+    let high = 0, medium = 0, low = 0;
+    
+    if (riskAssessments.size === 0) {
+      console.warn('⚠️ No risk assessments available');
+    } else {
+      console.log('📊 Risk Assessments Map size:', riskAssessments.size);
+    }
+    
     riskAssessments.forEach(assessment => {
-      if (assessment.riskLevel === RiskLevel.CRITICAL) critical++;
-      else if (assessment.riskLevel === RiskLevel.HIGH) high++;
+      if (assessment.riskLevel === RiskLevel.HIGH) high++;
       else if (assessment.riskLevel === RiskLevel.MEDIUM) medium++;
       else if (assessment.riskLevel === RiskLevel.LOW) low++;
     });
-    return { critical, high, medium, low, total: employeeData.length };
+    
+    const counts = { high, medium, low, total: employeeData.length };
+    console.log('✅ Risk Counts:', counts);
+    
+    return counts;
   }, [riskAssessments, employeeData]);
 
   // Filtered employees based on selected risk and search
@@ -35,8 +46,7 @@ const UnifiedRiskDashboard: React.FC = () => {
     })).filter(emp => {
       // Risk filter
       let matchesRisk = true;
-      if (selectedRiskFilter === 'critical') matchesRisk = emp.assessment?.riskLevel === RiskLevel.CRITICAL;
-      else if (selectedRiskFilter === 'high') matchesRisk = emp.assessment?.riskLevel === RiskLevel.HIGH;
+      if (selectedRiskFilter === 'high') matchesRisk = emp.assessment?.riskLevel === RiskLevel.HIGH;
       else if (selectedRiskFilter === 'medium') matchesRisk = emp.assessment?.riskLevel === RiskLevel.MEDIUM;
       else if (selectedRiskFilter === 'low') matchesRisk = emp.assessment?.riskLevel === RiskLevel.LOW;
       
@@ -68,11 +78,10 @@ const UnifiedRiskDashboard: React.FC = () => {
   // Risk distribution
   const riskDistribution = useMemo(() => {
     return [
-      { name: RiskLevel.CRITICAL, value: riskCounts.critical, color: '#d32f2f' },
-      { name: RiskLevel.HIGH, value: riskCounts.high, color: '#f57c00' },
-      { name: RiskLevel.MEDIUM, value: riskCounts.medium, color: '#fbc02d' },
-      { name: RiskLevel.LOW, value: riskCounts.low, color: '#388e3c' },
-    ].filter(d => d.value > 0);
+      { name: RiskLevel.HIGH, value: riskCounts.high, color: '#ef4444' },
+      { name: RiskLevel.MEDIUM, value: riskCounts.medium, color: '#f59e0b' },
+      { name: RiskLevel.LOW, value: riskCounts.low, color: '#10b981' }
+    ];
   }, [riskCounts]);
 
   const riskTrend = useMemo(() => getRiskTrend(7), [getRiskTrend]);
@@ -83,42 +92,41 @@ const UnifiedRiskDashboard: React.FC = () => {
 
   // Department risk summary
   const deptRiskSummary = useMemo(() => {
-    const summary: Record<string, { total: number; critical: number; high: number; avgRisk: number }> = {};
+    const summary: Record<string, { total: number; high: number; medium: number; avgRisk: number }> = {};
     
     employeeData.forEach(emp => {
       const dept = emp.department || 'Unknown';
       const assessment = riskAssessments.get(emp.user);
-      const isCritical = assessment?.riskLevel === RiskLevel.CRITICAL;
       const isHigh = assessment?.riskLevel === RiskLevel.HIGH;
+      const isMedium = assessment?.riskLevel === RiskLevel.MEDIUM;
       
       if (!summary[dept]) {
-        summary[dept] = { total: 0, critical: 0, high: 0, avgRisk: 0 };
+        summary[dept] = { total: 0, high: 0, medium: 0, avgRisk: 0 };
       }
       summary[dept].total++;
-      if (isCritical) summary[dept].critical++;
       if (isHigh) summary[dept].high++;
+      if (isMedium) summary[dept].medium++;
       summary[dept].avgRisk += assessment?.overallRiskScore || 0;
     });
 
     return Object.entries(summary)
       .map(([name, data]) => ({
         name,
-        critical: data.critical,
         high: data.high,
+        medium: data.medium,
         avgRisk: Math.round(data.avgRisk / data.total)
       }))
-      .sort((a, b) => b.critical + b.high - a.critical - a.high);
+      .sort((a, b) => b.high + b.medium - a.high - a.medium);
   }, [employeeData, riskAssessments]);
 
   const getRiskLevelColor = (level: RiskLevel): string => {
     switch (level) {
-      case RiskLevel.CRITICAL: return '#d32f2f';
-      case RiskLevel.HIGH: return '#f57c00';
-      case RiskLevel.MEDIUM: return '#fbc02d';
-      case RiskLevel.LOW: return '#388e3c';
+      case RiskLevel.HIGH: return '#ef4444';
+      case RiskLevel.MEDIUM: return '#f59e0b';
+      case RiskLevel.LOW: return '#10b981';
+      default: return '#6b7280';
     }
   };
-
   return (
     <div className="space-y-8 pb-8">
       {/* KPI Cards - Clickable Buttons */}
@@ -140,38 +148,38 @@ const UnifiedRiskDashboard: React.FC = () => {
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
 
-        {/* Critical Risk */}
-        <button
-          onClick={() => setSelectedRiskFilter('critical')}
-          className={`group relative overflow-hidden p-8 rounded-2xl border-2 transition-all duration-300 ${
-            selectedRiskFilter === 'critical'
-              ? 'bg-red-600/30 border-red-500 shadow-lg shadow-red-500/30'
-              : 'bg-red-500/10 border-red-500/30 hover:border-red-500 hover:bg-red-600/20 hover:shadow-lg hover:shadow-red-500/20'
-          }`}
-        >
-          <div className="relative z-10">
-            <p className="text-sm font-semibold text-red-300 uppercase tracking-widest">Critical Risk</p>
-            <p className="text-5xl font-black text-red-400 mt-3">{riskCounts.critical}</p>
-            <p className="text-xs text-red-200 mt-2">Immediate Action Required</p>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        </button>
-
         {/* High Risk */}
         <button
           onClick={() => setSelectedRiskFilter('high')}
           className={`group relative overflow-hidden p-8 rounded-2xl border-2 transition-all duration-300 ${
             selectedRiskFilter === 'high'
-              ? 'bg-orange-600/30 border-orange-500 shadow-lg shadow-orange-500/30'
-              : 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500 hover:bg-orange-600/20 hover:shadow-lg hover:shadow-orange-500/20'
+              ? 'bg-red-600/30 border-red-500 shadow-lg shadow-red-500/30'
+              : 'bg-red-500/10 border-red-500/30 hover:border-red-500 hover:bg-red-600/20 hover:shadow-lg hover:shadow-red-500/20'
           }`}
         >
           <div className="relative z-10">
-            <p className="text-sm font-semibold text-orange-300 uppercase tracking-widest">High Risk</p>
-            <p className="text-5xl font-black text-orange-400 mt-3">{riskCounts.high}</p>
-            <p className="text-xs text-orange-200 mt-2">Enhanced Monitoring</p>
+            <p className="text-sm font-semibold text-red-300 uppercase tracking-widest">🔴 High Risk</p>
+            <p className="text-5xl font-black text-red-400 mt-3">{riskCounts.high}</p>
+            <p className="text-xs text-red-200 mt-2">Requires Investigation</p>
           </div>
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+
+        {/* Medium Risk */}
+        <button
+          onClick={() => setSelectedRiskFilter('medium')}
+          className={`group relative overflow-hidden p-8 rounded-2xl border-2 transition-all duration-300 ${
+            selectedRiskFilter === 'medium'
+              ? 'bg-amber-600/30 border-amber-500 shadow-lg shadow-amber-500/30'
+              : 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500 hover:bg-amber-600/20 hover:shadow-lg hover:shadow-amber-500/20'
+          }`}
+        >
+          <div className="relative z-10">
+            <p className="text-sm font-semibold text-amber-300 uppercase tracking-widest">🟡 Medium Risk</p>
+            <p className="text-5xl font-black text-amber-400 mt-3">{riskCounts.medium}</p>
+            <p className="text-xs text-amber-200 mt-2">Monitor Closely</p>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
 
         {/* Low Risk */}
@@ -184,7 +192,7 @@ const UnifiedRiskDashboard: React.FC = () => {
           }`}
         >
           <div className="relative z-10">
-            <p className="text-sm font-semibold text-emerald-300 uppercase tracking-widest">Low Risk</p>
+            <p className="text-sm font-semibold text-emerald-300 uppercase tracking-widest">🟢 Low Risk</p>
             <p className="text-5xl font-black text-emerald-400 mt-3">{riskCounts.low}</p>
             <p className="text-xs text-emerald-200 mt-2">Baseline Compliance</p>
           </div>
@@ -279,50 +287,6 @@ const UnifiedRiskDashboard: React.FC = () => {
       {/* Details Tab - Employee List with Filters */}
       {viewMode === 'details' && (
         <div className="space-y-6">
-          {/* Search Bar */}
-          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search employees..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-3 pl-12 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  />
-                  <svg className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <select
-                  value={searchField}
-                  onChange={(e) => setSearchField(e.target.value as any)}
-                  className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="all">All Fields</option>
-                  <option value="id">Employee ID</option>
-                  <option value="name">Name</option>
-                  <option value="department">Department</option>
-                </select>
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            </div>
-            {searchQuery && (
-              <div className="mt-3 text-sm text-slate-400">
-                Found {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''} matching "{searchQuery}"
-              </div>
-            )}
-          </div>
 
           <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
             <h3 className="text-lg font-bold text-white mb-6">
@@ -394,52 +358,97 @@ const UnifiedRiskDashboard: React.FC = () => {
                 </div>
 
                 {/* Comprehensive Activity Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {/* File Operations */}
+                <div className="grid grid-cols-1 gap-6 mb-6">
+                  {/* File Operations - Full Width */}
                   <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
                     <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                       <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      File Operations
+                      Detailed File Operations (with Timestamps)
                     </h5>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    
+                    {/* File Operations Summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 pb-5 border-b border-slate-700">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Opened:</span>
-                        <span className="text-white font-semibold">{selectedUserData.file_opened || 0}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Copied:</span>
-                        <span className="text-white font-semibold">{selectedUserData.file_copied || 0}</span>
+                        <span className="text-slate-400 text-xs">Opened:</span>
+                        <span className="text-white font-semibold text-sm">{selectedUserData.file_opened || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Deleted:</span>
-                        <span className="text-red-400 font-semibold">{selectedUserData.file_deleted || 0}</span>
+                        <span className="text-slate-400 text-xs">Copied:</span>
+                        <span className="text-white font-semibold text-sm">{selectedUserData.file_copied || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Downloaded:</span>
-                        <span className="text-orange-400 font-semibold">{selectedUserData.file_downloaded || 0}</span>
+                        <span className="text-slate-400 text-xs">Deleted:</span>
+                        <span className="text-red-400 font-semibold text-sm">{selectedUserData.file_deleted || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Uploaded:</span>
-                        <span className="text-white font-semibold">{selectedUserData.file_uploaded || 0}</span>
+                        <span className="text-slate-400 text-xs">Downloaded:</span>
+                        <span className="text-orange-400 font-semibold text-sm">{selectedUserData.file_downloaded || 0}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Edited:</span>
-                        <span className="text-white font-semibold">{selectedUserData.file_edited || 0}</span>
+                        <span className="text-slate-400 text-xs">Uploaded:</span>
+                        <span className="text-white font-semibold text-sm">{selectedUserData.file_uploaded || 0}</span>
                       </div>
-                      <div className="flex justify-between col-span-2 pt-3 border-t border-slate-700">
-                        <span className="text-slate-400">Sensitive Files:</span>
-                        <span className="text-red-400 font-bold">{selectedUserData.sensitive_files_accessed || 0}</span>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400 text-xs">Edited:</span>
+                        <span className="text-white font-semibold text-sm">{selectedUserData.file_edited || 0}</span>
                       </div>
-                      <div className="flex justify-between col-span-2">
-                        <span className="text-slate-400">Unique Files:</span>
-                        <span className="text-white font-semibold">{selectedUserData.unique_files_accessed || 0}</span>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400 text-xs">Sensitive:</span>
+                        <span className="text-red-400 font-bold text-sm">{selectedUserData.sensitive_files_accessed || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400 text-xs">Unique Files:</span>
+                        <span className="text-white font-semibold text-sm">{selectedUserData.unique_files_accessed || 0}</span>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Systems Accessed */}
+                    {/* File Operations Details with Timestamps */}
+                    {selectedUserData.file_operations_detail && (
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        <p className="text-xs font-semibold text-slate-300 mb-3">📋 Recent File Operations (Last 20):</p>
+                        {(() => {
+                          try {
+                            const ops = JSON.parse(selectedUserData.file_operations_detail);
+                            if (!ops || ops.length === 0) return <p className="text-slate-500 text-xs">No operation details available</p>;
+                            
+                            return ops.slice(0, 20).map((op: any, idx: number) => (
+                              <div key={idx} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 text-xs hover:border-slate-600 transition-all">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-slate-100 font-mono text-xs truncate font-semibold">{op.file_name}</p>
+                                  </div>
+                                  {op.is_sensitive && (
+                                    <span className="text-red-400 font-bold whitespace-nowrap">🔒 SENSITIVE</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
+                                    op.operation === 'delete' ? 'bg-red-500/20 text-red-300' :
+                                    op.operation === 'download' ? 'bg-orange-500/20 text-orange-300' :
+                                    op.operation === 'copy' ? 'bg-yellow-500/20 text-yellow-300' :
+                                    op.operation === 'upload' ? 'bg-green-500/20 text-green-300' :
+                                    'bg-blue-500/20 text-blue-300'
+                                  }`}>
+                                    {op.operation.toUpperCase()}
+                                  </span>
+                                  <span className="text-slate-400">@ {op.system}</span>
+                                  <span className="text-slate-500">📅 {op.timestamp}</span>
+                                </div>
+                              </div>
+                            ));
+                          } catch (e) {
+                            return <p className="text-slate-500 text-xs">Unable to parse operation details</p>;
+                          }
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Secondary Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
                     <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                       <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -626,13 +635,15 @@ const UnifiedRiskDashboard: React.FC = () => {
       {/* Activity Tab */}
       {viewMode === 'activity' && (
         <div className="space-y-6">
+          {/* Search Section */}
           <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+            <h3 className="text-lg font-bold text-white mb-4">Search Employee Activity</h3>
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Search employees for activity logs..."
+                    placeholder="Enter employee ID, name, or department..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full px-4 py-3 pl-12 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
@@ -653,6 +664,16 @@ const UnifiedRiskDashboard: React.FC = () => {
                   <option value="name">Name</option>
                   <option value="department">Department</option>
                 </select>
+                <button
+                  onClick={() => {
+                    if (filteredEmployees.length > 0) {
+                      setSelectedUser(filteredEmployees[0].user);
+                    }
+                  }}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-indigo-500/50"
+                >
+                  Search
+                </button>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
@@ -670,38 +691,66 @@ const UnifiedRiskDashboard: React.FC = () => {
             )}
           </div>
 
+          {/* Activity Display */}
           <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
             {selectedUser ? (
               <>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                  <h3 className="text-lg font-bold text-white">Activity for {selectedUserData?.employee_name || selectedUser}</h3>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6 pb-6 border-b border-slate-700">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Activity Log</h3>
+                    <p className="text-sm text-slate-400 mt-1">{selectedUserData?.employee_name || selectedUser}</p>
+                  </div>
                   <button
                     onClick={() => setSelectedUser(null)}
-                    className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:border-indigo-500/60 transition-all"
+                    className="px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:border-indigo-500/60 transition-all text-sm"
                   >
-                    Change Employee
+                    ← Change Employee
                   </button>
                 </div>
-                <ActivityTimeline activities={selectedUserActivities} />
+                
+                {/* Activity Visualization */}
+                {selectedUserData && (
+                  <div className="mb-8">
+                    <ActivityVisualization employeeData={selectedUserData as EmployeeRisk} />
+                  </div>
+                )}
+                
+                {/* Activity Timeline with Search */}
+                <div className="mt-8">
+                  <h4 className="text-md font-bold text-white mb-4">Timeline Events</h4>
+                  <ActivityTimeline activities={selectedUserActivities} showSearch={true} />
+                </div>
               </>
             ) : (
               <div className="space-y-4">
-                <p className="text-slate-400">Select an employee to view their activity log.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {filteredEmployees.slice(0, 8).map((emp) => (
-                    <button
-                      key={emp.user}
-                      onClick={() => setSelectedUser(emp.user)}
-                      className="text-left p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-indigo-500/50 transition-all"
-                    >
-                      <p className="text-white font-semibold">{emp.employee_name || emp.user}</p>
-                      <p className="text-xs text-slate-400">{emp.user_id || emp.user} • {emp.department || 'Unknown'} • {emp.job_title || 'N/A'}</p>
-                    </button>
-                  ))}
-                </div>
-                {filteredEmployees.length === 0 && (
+                {filteredEmployees.length > 0 ? (
+                  <>
+                    <p className="text-slate-400 text-sm mb-4">Click on an employee below to view their activity log:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                      {filteredEmployees.slice(0, 30).map((emp) => (
+                        <button
+                          key={emp.user}
+                          onClick={() => setSelectedUser(emp.user)}
+                          className="text-left p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-indigo-500/70 hover:bg-slate-800/80 transition-all group"
+                        >
+                          <p className="text-white font-semibold group-hover:text-indigo-300 transition-colors">{emp.employee_name || emp.user}</p>
+                          <p className="text-xs text-slate-400 mt-1">{emp.user_id || emp.user}</p>
+                          <p className="text-xs text-slate-500 mt-1">{emp.department} • {emp.job_title}</p>
+                          <div className="mt-2 flex gap-2">
+                            <span className={`text-xs px-2 py-1 rounded ${emp.risk_profile === 'high' ? 'bg-red-500/20 text-red-300' : emp.risk_profile === 'medium' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}`}>
+                              {emp.risk_profile?.toUpperCase()}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {filteredEmployees.length > 30 && (
+                      <p className="text-xs text-slate-500 text-center mt-4">Showing 30 of {filteredEmployees.length} employees</p>
+                    )}
+                  </>
+                ) : (
                   <div className="text-center py-8 text-slate-500">
-                    No employees match your search.
+                    <p>No employees match your search. Try different keywords.</p>
                   </div>
                 )}
               </div>

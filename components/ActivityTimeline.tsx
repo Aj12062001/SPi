@@ -5,11 +5,14 @@ import '../styles/ActivityTimeline.css';
 interface ActivityTimelineProps {
   activities: ActivityLog[];
   userId?: string;
+  showSearch?: boolean;
 }
 
-const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ activities, userId }) => {
+const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ activities, userId, showSearch = false }) => {
   const [filter, setFilter] = useState<'all' | 'anomalous' | 'high-severity'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchType, setSearchType] = useState<'employee' | 'activity'>('employee');
 
   const filteredActivities = useMemo(() => {
     let filtered = activities;
@@ -24,8 +27,20 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ activities, userId 
       filtered = filtered.filter(a => a.severity === 'high' || a.severity === 'critical');
     }
 
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(activity => {
+        if (searchType === 'employee') {
+          return activity.userId?.toLowerCase().includes(query) || false;
+        } else {
+          return activity.activityType?.toLowerCase().includes(query) || false;
+        }
+      });
+    }
+
     return filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [activities, userId, filter]);
+  }, [activities, userId, filter, searchQuery, searchType]);
 
   const getActivityIcon = (type: ActivityLog['activityType']): string => {
     const icons: { [key: string]: string } = {
@@ -97,6 +112,41 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ activities, userId 
           </button>
         </div>
       </div>
+
+      {/* Search Employee Activity Section */}
+      {showSearch && (
+        <div className="search-employee-activity">
+          <div className="search-container">
+            <div className="search-input-group">
+              <input
+                type="text"
+                placeholder={searchType === 'employee' ? 'Search employee ID...' : 'Search activity type...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              <select
+                value={searchType}
+                onChange={(e) => setSearchType(e.target.value as 'employee' | 'activity')}
+                className="search-type-select"
+              >
+                <option value="employee">Search by Employee</option>
+                <option value="activity">Search by Activity</option>
+              </select>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="clear-search-btn"
+                style={{ display: searchQuery ? 'inline-block' : 'none' }}
+              >
+                ✕ Clear
+              </button>
+            </div>
+            <div className="search-results-info">
+              Found {filteredActivities.length} activities {searchQuery ? `for "${searchQuery}"` : ''}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="timeline-container">
         {filteredActivities.length === 0 ? (

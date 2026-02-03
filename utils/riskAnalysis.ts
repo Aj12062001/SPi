@@ -20,6 +20,11 @@ export const calculateRiskScore = (employee: EmployeeRisk): number => {
   const anomalyBoost = employee.anomaly_label === -1 ? 10 : 0;
 
   const score = modelRisk * 0.25 + fileActivityRisk + usbActivityRisk + nightLoginRisk + loginVolumeRisk + anomalyBoost;
+  
+  // Debug first few employees
+  if (Math.random() < 0.01) {
+    console.log(`📊 Risk Score for ${employee.user}: ${score} (modelRisk=${modelRisk}, fileRisk=${fileActivityRisk}, usbRisk=${usbActivityRisk})`);
+  }
 
   return Math.round(score * 100) / 100;
 };
@@ -28,7 +33,6 @@ export const calculateRiskScore = (employee: EmployeeRisk): number => {
  * Determine risk level from score
  */
 export const getRiskLevel = (score: number): RiskLevel => {
-  if (score >= 80) return RiskLevel.CRITICAL;
   if (score >= 60) return RiskLevel.HIGH;
   if (score >= 30) return RiskLevel.MEDIUM;
   return RiskLevel.LOW;
@@ -107,7 +111,7 @@ export const generateRiskAssessment = (
     recommendations.push('No significant risk indicators detected');
   }
 
-  return {
+  const assessment: RiskAssessment = {
     user: employee.user,
     overallRiskScore: Math.round(overallRiskScore * 100) / 100,
     riskLevel,
@@ -121,6 +125,8 @@ export const generateRiskAssessment = (
     recommendations,
     lastUpdated: new Date().toISOString(),
   };
+
+  return assessment;
 };
 
 /**
@@ -218,11 +224,11 @@ export const generateMitigationRecommendations = (
 ): string[] => {
   const recommendations: string[] = [];
 
-  if (assessment.riskLevel === RiskLevel.CRITICAL) {
-    recommendations.push('🔴 CRITICAL: Immediate investigation required');
-    recommendations.push('Consider account suspension pending review');
-  } else if (assessment.riskLevel === RiskLevel.HIGH) {
-    recommendations.push('🟠 HIGH PRIORITY: Escalate to security team');
+  if (assessment.riskLevel === RiskLevel.HIGH) {
+    recommendations.push('🔴 HIGH RISK: Immediate investigation required');
+    recommendations.push('Increase monitoring and review access permissions');
+  } else if (assessment.riskLevel === RiskLevel.MEDIUM) {
+    recommendations.push('🟡 MEDIUM PRIORITY: Schedule review with supervisor');
     recommendations.push('Increase monitoring frequency');
   }
 

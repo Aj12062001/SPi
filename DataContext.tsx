@@ -96,9 +96,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (storedEmployees) {
       try {
-        setEmployeeDataState(JSON.parse(storedEmployees));
+        const parsed = JSON.parse(storedEmployees);
+        console.log('✅ Loaded employees from localStorage:', parsed.length);
+        setEmployeeDataState(parsed);
       } catch (error) {
-        console.error('Error loading employee data:', error);
+        console.error('❌ Error loading employee data:', error);
       }
     }
 
@@ -109,23 +111,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error loading activity logs:', error);
       }
     }
-
-    // Generate initial risk assessments
-    generateAssessments(employeeData);
   }, []);
 
-  // Update risk assessments when employee data changes
+  // Update risk assessments when employee data or activity logs change
   useEffect(() => {
-    generateAssessments(employeeData);
-  }, [employeeData]);
+    if (employeeData.length > 0) {
+      console.log('🔄 Generating risk assessments for', employeeData.length, 'employees');
+      generateAssessmentsBatched(employeeData);
+    }
+  }, [employeeData, activityLogs]);
 
-  const generateAssessments = (employees: EmployeeRisk[]) => {
+  const generateAssessmentsBatched = (employees: EmployeeRisk[]) => {
     const newAssessments = new Map<string, RiskAssessment>();
-    employees.forEach(emp => {
-      const assessment = generateRiskAssessment(emp, activityLogs);
-      newAssessments.set(emp.user, assessment);
-    });
-    setRiskAssessments(newAssessments);
+    const BATCH_SIZE = 100; // Process 100 employees at a time
+    let processedCount = 0;
+
+    const processBatch = (startIdx: number) => {
+      const endIdx = Math.min(startIdx + BATCH_SIZE, employees.length);
+      
+      for (let i = startIdx; i < endIdx; i++) {
+        const emp = employees[i];
+        const assessment = generateRiskAssessment(emp, activityLogs);
+        newAssessments.set(emp.user, assessment);
+        processedCount++;
+      }
+
+      // Log every 10% progress
+      if (processedCount % Math.max(100, Math.floor(employees.length / 10)) === 0 || endIdx === employees.length) {
+        console.log(`📊 Risk assessments: ${processedCount}/${employees.length} (${Math.round((processedCount / employees.length) * 100)}%)`);
+      }
+
+      if (endIdx < employees.length) {
+        // Schedule next batch immediately with minimal delay
+        setTimeout(() => processBatch(endIdx), 0);
+      } else {
+        console.log('✅ All risk assessments generated');
+        setRiskAssessments(newAssessments);
+      }
+    };
+
+    processBatch(0);
   };
 
   const setEmployeeData = (data: EmployeeRisk[]) => {
