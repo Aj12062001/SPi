@@ -2,6 +2,7 @@
 // ============ Core Employee Risk Data ============
 export interface EmployeeRisk {
   user: string;
+  user_id?: string;
   employee_name?: string;
   department?: string;
   job_title?: string;
@@ -10,26 +11,49 @@ export interface EmployeeRisk {
   night_logins: number;
   unique_pcs?: number;
   usb_count: number;
+  
+  // Session tracking
+  session_duration_total?: number;
+  session_duration_avg?: number;
+  
+  // File operations (detailed)
   file_activity_count: number;
-  file_deleted?: number;
+  file_opened?: number;
   file_copied?: number;
-  file_accessed?: number;
+  file_deleted?: number;
+  file_downloaded?: number;
+  file_uploaded?: number;
+  file_edited?: number;
+  total_file_operations?: number;
+  sensitive_files_accessed?: number;
+  unique_files_accessed?: number;
+  systems_accessed?: string;  // Comma-separated list
+  file_operations_detail?: string;  // JSON string of operations
+  
+  // Email activity
   emails_sent?: number;
   external_mails?: number;
   email_attachments?: number;
+  avg_email_size?: number;
+  
+  // Web activity
   http_requests?: number;
   unique_urls?: number;
+  
+  // Other attributes
   cctv_anomalies?: number;
   access_card_anomalies?: number;
   behavioral_score?: number;
   anomaly_label: number;
   risk_score: number;
+  risk_profile?: string;
+  
   // Legacy compatibility fields
+  file_accessed?: number;
   logoff_count?: number;
   file_events?: number;
   unique_files?: number;
   avg_filename_length?: number;
-  avg_email_size?: number;
   attachments?: number;
   usb_connect?: number;
   usb_disconnect?: number;
@@ -45,11 +69,16 @@ export interface ActivityLog {
   id: string;
   userId: string;
   timestamp: string;
-  activityType: 'file_opened' | 'file_deleted' | 'file_copied' | 'file_modified' | 'file_accessed' | 'usb_connected' | 'usb_disconnected' | 'email_sent' | 'login' | 'logout' | 'http_request';
+  activityType: 'file_opened' | 'file_deleted' | 'file_copied' | 'file_modified' | 'file_accessed' | 
+                'file_downloaded' | 'file_uploaded' | 'file_edited' | 'usb_connected' | 'usb_disconnected' | 
+                'email_sent' | 'login' | 'logout' | 'http_request';
   details: {
     fileName?: string;
     fileSize?: number;
     filePath?: string;
+    system?: string;
+    isSensitive?: boolean;
+    operation?: string;
     usbName?: string;
     emailRecipients?: number;
     urlAccessed?: string;
@@ -66,6 +95,12 @@ export interface ActivityStats {
   filesOpened: number;
   filesDeleted: number;
   filesCopied: number;
+  filesDownloaded: number;
+  filesUploaded: number;
+  filesEdited: number;
+  sensitiveFilesAccessed: number;
+  uniqueFilesAccessed: number;
+  systemsAccessed: string[];
   usbConnections: number;
   emailsSent: number;
   loginCount: number;

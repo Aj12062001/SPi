@@ -1,25 +1,9 @@
-
-import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import React, { useMemo } from 'react';
 import { useData } from '../DataContext';
 import { RiskLevel } from '../types';
 
 const Introduction: React.FC = () => {
-  const { employeeData, riskAssessments, activityLogs, getRiskTrend } = useData();
-  const [graphView, setGraphView] = useState<'current' | 'previous'>('current');
-
-  const riskTrend = useMemo(() => getRiskTrend(7), [getRiskTrend]);
-  const previousTrend = useMemo(
-    () =>
-      riskTrend.map((point, idx) => ({
-        ...point,
-        averageRisk: Math.max(point.averageRisk - 5 - idx, 0),
-        label: 'Previous Window',
-      })),
-    [riskTrend]
-  );
-
-  const trendToRender = graphView === 'current' ? riskTrend : previousTrend;
+  const { employeeData, riskAssessments, activityLogs } = useData();
 
   const criticalRisks = useMemo(
     () => Array.from(riskAssessments.values()).filter((r) => r.riskLevel === RiskLevel.CRITICAL).length,
@@ -100,62 +84,51 @@ const Introduction: React.FC = () => {
             </div>
           </div>
 
+          {/* Additional Info Card - Replacing the Isolation Forest Graph */}
           <div className="lg:col-span-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-400">Threat Trajectory</p>
-                <p className="text-lg font-semibold text-white">Isolation Forest risk curve</p>
+            <div className="mb-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Analysis Dashboard</p>
+              <p className="text-lg font-semibold text-white">Quick Actions & Insights</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700 hover:border-indigo-500/50 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-semibold text-white">Upload Data</h4>
+                </div>
+                <p className="text-sm text-slate-400">Import CSV datasets for comprehensive analysis</p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setGraphView('current')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                    graphView === 'current'
-                      ? 'bg-indigo-600 text-white border-indigo-400 shadow-[0_0_20px_rgba(79,70,229,0.45)]'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-indigo-400/60 hover:text-white'
-                  }`}
-                >
-                  Live window
-                </button>
-                <button
-                  onClick={() => setGraphView('previous')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                    graphView === 'previous'
-                      ? 'bg-cyan-600 text-white border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.4)]'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-cyan-300/60 hover:text-white'
-                  }`}
-                >
-                  Previous graph
-                </button>
+              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700 hover:border-cyan-500/50 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-semibold text-white">View Analytics</h4>
+                </div>
+                <p className="text-sm text-slate-400">Explore ML models & risk curve visualization</p>
+              </div>
+              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700 hover:border-emerald-500/50 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-semibold text-white">Risk Assessment</h4>
+                </div>
+                <p className="text-sm text-slate-400">Detailed employee activity & threat analysis</p>
               </div>
             </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendToRender} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="#1f2937" />
-                  <XAxis dataKey="date" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10 }} />
-                  <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: 12 }} />
-                  <Line
-                    type="monotone"
-                    dataKey="averageRisk"
-                    stroke={graphView === 'current' ? '#8b5cf6' : '#22d3ee'}
-                    strokeWidth={3}
-                    dot={{ r: 3, fill: '#fff' }}
-                    activeDot={{ r: 5 }}
-                    name={graphView === 'current' ? 'Live risk score' : 'Previous window'}
-                    isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex items-center justify-between mt-3 text-xs text-slate-400">
-              <span>{graphView === 'current' ? 'Current sweep with live anomalies' : 'Prior sweep for quick visual comparison'}</span>
-              <span className="inline-flex items-center gap-2 text-slate-300">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" /> Live
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-300" /> Previous
-              </span>
+            <div className="mt-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+              <p className="text-sm text-indigo-200">
+                💡 <strong>Pro Tip:</strong> Navigate to Analytics tab to view the Isolation Forest risk curve and ML model performance metrics.
+              </p>
             </div>
           </div>
         </div>

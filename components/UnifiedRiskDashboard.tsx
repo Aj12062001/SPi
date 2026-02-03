@@ -12,6 +12,8 @@ const UnifiedRiskDashboard: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedRiskFilter, setSelectedRiskFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
   const [viewMode, setViewMode] = useState<'overview' | 'details' | 'activity'>('overview');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchField, setSearchField] = useState<'all' | 'id' | 'name' | 'department'>('all');
 
   // Risk counts
   const riskCounts = useMemo(() => {
@@ -25,20 +27,43 @@ const UnifiedRiskDashboard: React.FC = () => {
     return { critical, high, medium, low, total: employeeData.length };
   }, [riskAssessments, employeeData]);
 
-  // Filtered employees based on selected risk
+  // Filtered employees based on selected risk and search
   const filteredEmployees = useMemo(() => {
     return (employeeData as EmployeeRisk[]).map(emp => ({
       ...emp,
       assessment: riskAssessments.get(emp.user)
     })).filter(emp => {
-      if (selectedRiskFilter === 'all') return true;
-      if (selectedRiskFilter === 'critical') return emp.assessment?.riskLevel === RiskLevel.CRITICAL;
-      if (selectedRiskFilter === 'high') return emp.assessment?.riskLevel === RiskLevel.HIGH;
-      if (selectedRiskFilter === 'medium') return emp.assessment?.riskLevel === RiskLevel.MEDIUM;
-      if (selectedRiskFilter === 'low') return emp.assessment?.riskLevel === RiskLevel.LOW;
-      return true;
+      // Risk filter
+      let matchesRisk = true;
+      if (selectedRiskFilter === 'critical') matchesRisk = emp.assessment?.riskLevel === RiskLevel.CRITICAL;
+      else if (selectedRiskFilter === 'high') matchesRisk = emp.assessment?.riskLevel === RiskLevel.HIGH;
+      else if (selectedRiskFilter === 'medium') matchesRisk = emp.assessment?.riskLevel === RiskLevel.MEDIUM;
+      else if (selectedRiskFilter === 'low') matchesRisk = emp.assessment?.riskLevel === RiskLevel.LOW;
+      
+      // Search filter
+      let matchesSearch = true;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        if (searchField === 'all') {
+          matchesSearch = 
+            (emp.user?.toLowerCase().includes(query)) ||
+            (emp.user_id?.toLowerCase().includes(query)) ||
+            (emp.employee_name?.toLowerCase().includes(query)) ||
+            (emp.department?.toLowerCase().includes(query));
+        } else if (searchField === 'id') {
+          matchesSearch = 
+            (emp.user?.toLowerCase().includes(query)) ||
+            (emp.user_id?.toLowerCase().includes(query));
+        } else if (searchField === 'name') {
+          matchesSearch = emp.employee_name?.toLowerCase().includes(query) || false;
+        } else if (searchField === 'department') {
+          matchesSearch = emp.department?.toLowerCase().includes(query) || false;
+        }
+      }
+      
+      return matchesRisk && matchesSearch;
     }).sort((a, b) => (b.assessment?.overallRiskScore || 0) - (a.assessment?.overallRiskScore || 0));
-  }, [employeeData, riskAssessments, selectedRiskFilter]);
+  }, [employeeData, riskAssessments, selectedRiskFilter, searchQuery, searchField]);
 
   // Risk distribution
   const riskDistribution = useMemo(() => {
@@ -254,6 +279,51 @@ const UnifiedRiskDashboard: React.FC = () => {
       {/* Details Tab - Employee List with Filters */}
       {viewMode === 'details' && (
         <div className="space-y-6">
+          {/* Search Bar */}
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search employees..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-3 pl-12 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  <svg className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={searchField}
+                  onChange={(e) => setSearchField(e.target.value as any)}
+                  className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">All Fields</option>
+                  <option value="id">Employee ID</option>
+                  <option value="name">Name</option>
+                  <option value="department">Department</option>
+                </select>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+            {searchQuery && (
+              <div className="mt-3 text-sm text-slate-400">
+                Found {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''} matching "{searchQuery}"
+              </div>
+            )}
+          </div>
+
           <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
             <h3 className="text-lg font-bold text-white mb-6">
               {selectedRiskFilter === 'all' && 'All Employees'}
@@ -288,7 +358,7 @@ const UnifiedRiskDashboard: React.FC = () => {
                 </div>
 
                 {/* Risk Details Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-slate-900 p-4 rounded-lg">
                     <p className="text-xs text-slate-400 uppercase tracking-wide">Overall Risk Score</p>
                     <p className="text-2xl font-bold text-white mt-1">{selectedUserAssessment.overallRiskScore.toFixed(1)}</p>
@@ -313,6 +383,151 @@ const UnifiedRiskDashboard: React.FC = () => {
                     <p className="text-xs text-slate-400 uppercase tracking-wide">Behavioral Risk</p>
                     <p className="text-2xl font-bold text-cyan-400 mt-1">{selectedUserAssessment.behavioralRisk.toFixed(1)}</p>
                   </div>
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <p className="text-xs text-slate-400 uppercase tracking-wide">Session Duration</p>
+                    <p className="text-2xl font-bold text-green-400 mt-1">{(selectedUserData.session_duration_total || 0)} min</p>
+                  </div>
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <p className="text-xs text-slate-400 uppercase tracking-wide">Night Logins</p>
+                    <p className="text-2xl font-bold text-yellow-400 mt-1">{selectedUserData.night_logins}</p>
+                  </div>
+                </div>
+
+                {/* Comprehensive Activity Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  {/* File Operations */}
+                  <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
+                    <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      File Operations
+                    </h5>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Opened:</span>
+                        <span className="text-white font-semibold">{selectedUserData.file_opened || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Copied:</span>
+                        <span className="text-white font-semibold">{selectedUserData.file_copied || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Deleted:</span>
+                        <span className="text-red-400 font-semibold">{selectedUserData.file_deleted || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Downloaded:</span>
+                        <span className="text-orange-400 font-semibold">{selectedUserData.file_downloaded || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Uploaded:</span>
+                        <span className="text-white font-semibold">{selectedUserData.file_uploaded || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Edited:</span>
+                        <span className="text-white font-semibold">{selectedUserData.file_edited || 0}</span>
+                      </div>
+                      <div className="flex justify-between col-span-2 pt-3 border-t border-slate-700">
+                        <span className="text-slate-400">Sensitive Files:</span>
+                        <span className="text-red-400 font-bold">{selectedUserData.sensitive_files_accessed || 0}</span>
+                      </div>
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-slate-400">Unique Files:</span>
+                        <span className="text-white font-semibold">{selectedUserData.unique_files_accessed || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Systems Accessed */}
+                  <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
+                    <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      </svg>
+                      Systems & Devices
+                    </h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Unique PCs:</span>
+                        <span className="text-white font-semibold">{selectedUserData.unique_pcs || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">USB Connections:</span>
+                        <span className="text-white font-semibold">{selectedUserData.usb_connect || 0}</span>
+                      </div>
+                      <div className="pt-3 border-t border-slate-700">
+                        <p className="text-slate-400 mb-2">Systems Accessed:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {(selectedUserData.systems_accessed || '').split(',').filter(s => s).slice(0, 5).map((system, idx) => (
+                            <span key={idx} className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-xs">
+                              {system}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Communication Activity */}
+                  <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
+                    <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Email & Web Activity
+                    </h5>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Emails Sent:</span>
+                        <span className="text-white font-semibold">{selectedUserData.emails_sent || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">External:</span>
+                        <span className="text-orange-400 font-semibold">{selectedUserData.external_mails || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Attachments:</span>
+                        <span className="text-white font-semibold">{selectedUserData.email_attachments || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">HTTP Requests:</span>
+                        <span className="text-white font-semibold">{selectedUserData.http_requests || 0}</span>
+                      </div>
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-slate-400">Unique URLs:</span>
+                        <span className="text-white font-semibold">{selectedUserData.unique_urls || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Login Activity */}
+                  <div className="bg-slate-900 p-5 rounded-xl border border-slate-700">
+                    <h5 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Login Activity
+                    </h5>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Total Logins:</span>
+                        <span className="text-white font-semibold">{selectedUserData.login_count || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Night Logins:</span>
+                        <span className="text-yellow-400 font-semibold">{selectedUserData.night_logins || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Total Duration:</span>
+                        <span className="text-white font-semibold">{selectedUserData.session_duration_total || 0} min</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Avg Session:</span>
+                        <span className="text-white font-semibold">{(selectedUserData.session_duration_avg || 0).toFixed(1)} min</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Recommendations */}
@@ -334,13 +549,14 @@ const UnifiedRiskDashboard: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700">
-                    <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">User ID</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Name</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Department</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Job Title</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Risk Score</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Level</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">File Ops</th>
-                    <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">USB</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Sensitive</th>
                     <th className="text-left py-3 px-4 font-semibold text-slate-400 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
@@ -348,11 +564,13 @@ const UnifiedRiskDashboard: React.FC = () => {
                   {filteredEmployees.slice(0, 20).map((emp, idx) => (
                     <tr
                       key={emp.user}
-                      className="border-b border-slate-700 hover:bg-slate-700/30 transition-colors"
+                      className="border-b border-slate-700 hover:bg-slate-700/30 transition-colors cursor-pointer"
+                      onClick={() => setSelectedUser(emp.user)}
                     >
-                      <td className="py-3 px-4 text-slate-300">{emp.user}</td>
+                      <td className="py-3 px-4 text-slate-300 font-mono text-xs">{emp.user_id || emp.user}</td>
                       <td className="py-3 px-4 font-medium text-white">{emp.employee_name}</td>
                       <td className="py-3 px-4 text-slate-400">{emp.department || 'Unknown'}</td>
+                      <td className="py-3 px-4 text-slate-400 text-xs">{emp.job_title || 'N/A'}</td>
                       <td className="py-3 px-4 font-bold text-white">{emp.assessment?.overallRiskScore.toFixed(1)}</td>
                       <td className="py-3 px-4">
                         <span
@@ -365,11 +583,20 @@ const UnifiedRiskDashboard: React.FC = () => {
                           {emp.assessment?.riskLevel}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-300">{(emp.file_deleted || 0) + (emp.file_copied || 0)}</td>
-                      <td className="py-3 px-4 text-slate-300">{emp.usb_count}</td>
+                      <td className="py-3 px-4 text-slate-300">{emp.total_file_operations || 0}</td>
+                      <td className="py-3 px-4">
+                        {(emp.sensitive_files_accessed || 0) > 0 ? (
+                          <span className="text-red-400 font-semibold">{emp.sensitive_files_accessed}</span>
+                        ) : (
+                          <span className="text-slate-600">0</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         <button
-                          onClick={() => setSelectedUser(emp.user)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedUser(emp.user);
+                          }}
                           className="text-indigo-400 hover:text-indigo-300 font-semibold text-xs"
                         >
                           View Details →
@@ -398,17 +625,88 @@ const UnifiedRiskDashboard: React.FC = () => {
 
       {/* Activity Tab */}
       {viewMode === 'activity' && (
-        <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-          {selectedUser ? (
-            <>
-              <h3 className="text-lg font-bold text-white mb-4">Activity for {selectedUserData?.employee_name || selectedUser}</h3>
-              <ActivityTimeline activities={selectedUserActivities} />
-            </>
-          ) : (
-            <div className="text-center py-12 text-slate-400">
-              <p>Select an employee from the details tab to view their activity log.</p>
+        <div className="space-y-6">
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search employees for activity logs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-3 pl-12 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  <svg className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={searchField}
+                  onChange={(e) => setSearchField(e.target.value as any)}
+                  className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">All Fields</option>
+                  <option value="id">Employee ID</option>
+                  <option value="name">Name</option>
+                  <option value="department">Department</option>
+                </select>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
-          )}
+            {searchQuery && (
+              <div className="mt-3 text-sm text-slate-400">
+                Found {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''} matching "{searchQuery}"
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+            {selectedUser ? (
+              <>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-bold text-white">Activity for {selectedUserData?.employee_name || selectedUser}</h3>
+                  <button
+                    onClick={() => setSelectedUser(null)}
+                    className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:border-indigo-500/60 transition-all"
+                  >
+                    Change Employee
+                  </button>
+                </div>
+                <ActivityTimeline activities={selectedUserActivities} />
+              </>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-slate-400">Select an employee to view their activity log.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredEmployees.slice(0, 8).map((emp) => (
+                    <button
+                      key={emp.user}
+                      onClick={() => setSelectedUser(emp.user)}
+                      className="text-left p-4 bg-slate-900 border border-slate-700 rounded-xl hover:border-indigo-500/50 transition-all"
+                    >
+                      <p className="text-white font-semibold">{emp.employee_name || emp.user}</p>
+                      <p className="text-xs text-slate-400">{emp.user_id || emp.user} • {emp.department || 'Unknown'} • {emp.job_title || 'N/A'}</p>
+                    </button>
+                  ))}
+                </div>
+                {filteredEmployees.length === 0 && (
+                  <div className="text-center py-8 text-slate-500">
+                    No employees match your search.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -40,65 +40,86 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
     const lines = csvText.split('\n').filter(line => line.trim());
     if (lines.length <= 1) return [];
 
+    const headers = lines[0].split(',').map(h => h.trim());
     const data: EmployeeRisk[] = [];
-    const today = new Date();
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
       if (values.length < 6) continue;
 
-      const user = values[0]?.trim() || `USER_${i.toString().padStart(5, '0')}`;
-      const employee_name = values[1]?.trim() || `Employee ${i}`;
-      const department = values[2]?.trim();
-      const job_title = values[3]?.trim();
-      const date = values[4]?.trim();
-      const login_count = parseInt(values[5]) || 0;
-      const night_logins = parseInt(values[6]) || 0;
-      const unique_pcs = parseInt(values[7]) || 1;
-      const usb_count = parseInt(values[8]) || 0;
-      const file_activity_count = parseInt(values[9]) || 0;
-      const file_deleted = parseInt(values[10]) || 0;
-      const file_copied = parseInt(values[11]) || 0;
-      const file_accessed = parseInt(values[12]) || 0;
-      const emails_sent = parseInt(values[13]) || 0;
-      const external_mails = parseInt(values[14]) || 0;
-      const email_attachments = parseInt(values[15]) || 0;
-      const http_requests = parseInt(values[16]) || 0;
-      const unique_urls = parseInt(values[17]) || 0;
-      const cctv_anomalies = parseInt(values[18]) || 0;
-      const access_card_anomalies = parseInt(values[19]) || 0;
-      const behavioral_score = parseFloat(values[20]) || 50;
-      const anomaly_label = parseInt(values[21]) || 1;
-      const risk_score = parseFloat(values[22]) || 0;
-
-      const day = new Date(today);
-      day.setDate(day.getDate() - (i % 14));
-
-      data.push({
-        user,
-        employee_name,
-        department,
-        job_title,
-        date: date || day.toISOString().slice(0, 10),
-        login_count,
-        night_logins,
-        unique_pcs,
-        usb_count,
-        file_activity_count,
-        file_deleted,
-        file_copied,
-        file_accessed,
-        emails_sent,
-        external_mails,
-        email_attachments,
-        http_requests,
-        unique_urls,
-        cctv_anomalies,
-        access_card_anomalies,
-        behavioral_score,
-        anomaly_label,
-        risk_score
+      const row: any = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index]?.trim() || '';
       });
+
+      // Map the CSV columns to EmployeeRisk interface
+      const employee: EmployeeRisk = {
+        user: row.user_id || row.user || `USER_${i.toString().padStart(5, '0')}`,
+        user_id: row.user_id || row.user,
+        employee_name: row.employee_name || `Employee ${i}`,
+        department: row.department,
+        job_title: row.job_title,
+        date: row.date,
+        login_count: parseInt(row.login_count) || 0,
+        night_logins: parseInt(row.night_logins) || 0,
+        unique_pcs: parseInt(row.unique_pcs) || 1,
+        
+        // Session tracking
+        session_duration_total: parseFloat(row.session_duration_total) || 0,
+        session_duration_avg: parseFloat(row.session_duration_avg) || 0,
+        
+        // USB activity
+        usb_count: parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0,
+        usb_connect: parseInt(row.usb_connect) || 0,
+        usb_disconnect: parseInt(row.usb_disconnect) || 0,
+        
+        // File operations
+        file_activity_count: parseInt(row.total_file_operations) || parseInt(row.file_activity_count) || 0,
+        file_opened: parseInt(row.file_opened) || 0,
+        file_copied: parseInt(row.file_copied) || 0,
+        file_deleted: parseInt(row.file_deleted) || 0,
+        file_downloaded: parseInt(row.file_downloaded) || 0,
+        file_uploaded: parseInt(row.file_uploaded) || 0,
+        file_edited: parseInt(row.file_edited) || 0,
+        total_file_operations: parseInt(row.total_file_operations) || 0,
+        sensitive_files_accessed: parseInt(row.sensitive_files_accessed) || 0,
+        unique_files_accessed: parseInt(row.unique_files_accessed) || 0,
+        systems_accessed: row.systems_accessed || '',
+        file_operations_detail: row.file_operations_detail || '',
+        
+        // Email activity
+        emails_sent: parseInt(row.emails_sent) || 0,
+        external_mails: parseInt(row.external_mails) || 0,
+        email_attachments: parseInt(row.email_attachments) || 0,
+        avg_email_size: parseFloat(row.avg_email_size) || 0,
+        
+        // Web activity
+        http_requests: parseInt(row.http_requests) || 0,
+        unique_urls: parseInt(row.unique_urls) || 0,
+        
+        // Other attributes
+        cctv_anomalies: parseInt(row.cctv_anomalies) || 0,
+        access_card_anomalies: parseInt(row.access_card_anomalies) || 0,
+        behavioral_score: parseFloat(row.behavioral_score) || 50,
+        anomaly_label: parseInt(row.anomaly_label) || 1,
+        risk_score: parseFloat(row.risk_score) || 0,
+        risk_profile: row.risk_profile,
+        
+        // Legacy compatibility
+        logoff_count: parseInt(row.logoff_count) || parseInt(row.login_count) || 0,
+        file_accessed: parseInt(row.file_accessed) || 0,
+        file_events: parseInt(row.file_events) || 0,
+        unique_files: parseInt(row.unique_files) || 0,
+        avg_filename_length: parseFloat(row.avg_filename_length) || 0,
+        attachments: parseInt(row.attachments) || 0,
+        O: parseInt(row.O) || 0,
+        C: parseInt(row.C) || 0,
+        E: parseInt(row.E) || 0,
+        A: parseInt(row.A) || 0,
+        N: parseInt(row.N) || 0,
+      };
+
+      data.push(employee);
     }
 
     return data;
