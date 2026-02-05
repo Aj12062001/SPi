@@ -1,78 +1,103 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../DataContext';
 import { EmployeeRisk } from '../types';
+import { Upload, Camera, Users, AlertCircle, CheckCircle2, Folder } from 'lucide-react';
 
 interface DataInputProps {
   onScanComplete: () => void;
 }
 
+interface CCTVAnalysisResult {
+  employeeId: string;
+  name: string;
+  status: 'authorized' | 'unauthorized' | 'unknown';
+  confidence: number;
+  detectionCount: number;
+  firstSeen?: string;
+  lastSeen?: string;
+  riskScore?: number;
+}
+
 const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
-  const { setEmployeeData } = useData();
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [statusText, setStatusText] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const { setEmployeeData, employeeData } = useData();
+  
+  // CSV Upload State
+  const [csvFile, setCSVFile] = useState<File | null>(null);
+  const [csvUploading, setCSVUploading] = useState(false);
+  
+  // Employee Images State
+  const [authorizedImages, setAuthorizedImages] = useState<File[]>([]);
+  const [unauthorizedImages, setUnauthorizedImages] = useState<File[]>([]);
+  const [authorizedImageIds, setAuthorizedImageIds] = useState<string[]>([]);
+  const [unauthorizedImageIds, setUnauthorizedImageIds] = useState<string[]>([]);
+  const [authorizedSingleId, setAuthorizedSingleId] = useState('');
+  const [unauthorizedSingleId, setUnauthorizedSingleId] = useState('');
+  const [authorizedIds, setAuthorizedIds] = useState('');
+  const [unauthorizedIds, setUnauthorizedIds] = useState('');
+  
+  // CCTV Video State
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [framesDir, setFramesDir] = useState('');
+  
+  // Processing State
+  const [processing, setProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  const [cctvResults, setCCTVResults] = useState<CCTVAnalysisResult[]>([]);
+  const [scanComplete, setScanComplete] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'unavailable'>('unavailable');
 
-  const scanStates = [
-    "Initializing Isolation Forest model...",
-    "Loading CSV report data...",
-    "Correlating logon events...",
-    "Analyzing USB and File activity...",
-    "Processing CCTV temporal data...",
-    "Computing risk probability scores...",
-    "Finalizing threat intelligence report..."
-  ];
+  const FACE_API_URL = 'http://localhost:8000';
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const isCsv = file?.type === 'text/csv' || file?.name.toLowerCase().endsWith('.csv');
-    const isTxtCsv = file?.name.toLowerCase().endsWith('.txt');
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const response = await fetch(`${FACE_API_URL}/health`);
+        if (response.ok) {
+          setBackendStatus('connected');
+        } else {
+          setBackendStatus('unavailable');
+        }
+      } catch {
+        setBackendStatus('unavailable');
+      }
+    };
+    checkBackend();
+    const interval = setInterval(checkBackend, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
-    if (file && (isCsv || isTxtCsv)) {
-      setSelectedFile(file);
-    } else {
-      alert('Please select a valid CSV or TXT file with comma-separated values.');
+  // CSV Parsing functions
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.replace(/^"|"$/g, '').trim());
+        current = '';
+      } else {
+        current += char;
+      }
     }
+    result.push(current.replace(/^"|"$/g, '').trim());
+    return result;
   };
 
   const parseCSV = (csvText: string): EmployeeRisk[] => {
-    if (!csvText || csvText.trim().length === 0) {
-      console.error('❌ CSV text is empty');
-      return [];
-    }
-
-    const lines = csvText.split('\n').filter((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed && idx === 0) return true;
-      return trimmed.length > 0;
-    });
-
-    console.log('📋 Total lines in CSV:', lines.length);
-
-    if (lines.length <= 1) {
-      console.error('❌ CSV has no data rows (only header or empty)');
-      return [];
-    }
+    const lines = csvText.split('\n').filter(line => line.trim().length > 0);
+    if (lines.length <= 1) return [];
 
     const headers = parseCSVLine(lines[0]);
-    console.log('📋 Headers parsed:', headers.length, 'columns');
-    
-    // Group rows by user_id to handle multi-day data
     const employeeMap = new Map<string, any>();
-    let skippedRows = 0;
 
     for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      
       try {
-        const values = parseCSVLine(line);
-        
-        if (values.length < Math.max(6, headers.length * 0.4)) {
-          skippedRows++;
-          continue;
-        }
+        const values = parseCSVLine(lines[i]);
+        if (values.length < 6) continue;
 
         const row: any = {};
         headers.forEach((header, index) => {
@@ -80,336 +105,638 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
         });
 
         const userId = row.user_id || row.user;
-        if (!userId || userId.trim().length === 0) {
-          skippedRows++;
-          continue;
-        }
+        if (!userId) continue;
 
-        // If user already exists, aggregate numeric values
         if (employeeMap.has(userId)) {
           const existing = employeeMap.get(userId);
           existing.login_count = (existing.login_count || 0) + (parseInt(row.login_count) || 0);
           existing.night_logins = (existing.night_logins || 0) + (parseInt(row.night_logins) || 0);
-          existing.usb_count = (existing.usb_count || 0) + (parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0);
+          existing.usb_count = (existing.usb_count || 0) + (parseInt(row.usb_connect) || 0);
           existing.file_activity_count = (existing.file_activity_count || 0) + (parseInt(row.total_file_operations) || 0);
-          existing.emails_sent = (existing.emails_sent || 0) + (parseInt(row.emails_sent) || 0);
-          existing.external_mails = (existing.external_mails || 0) + (parseInt(row.external_mails) || 0);
-          existing.http_requests = (existing.http_requests || 0) + (parseInt(row.http_requests) || 0);
         } else {
-          // Create new employee entry
           employeeMap.set(userId, {
             user: userId,
-            user_id: userId,
-            employee_name: row.employee_name || `Employee ${userId}`,
-            department: row.department,
-            job_title: row.job_title,
-            date: row.date,
+            user_id: row.user_id || userId,
+            employee_name: row.employee_name || row.name || userId,
+            department: row.department || 'Unknown',
+            job_title: row.job_title || '',
             login_count: parseInt(row.login_count) || 0,
             night_logins: parseInt(row.night_logins) || 0,
-            unique_pcs: parseInt(row.unique_pcs) || 1,
-            session_duration_total: parseFloat(row.session_duration_total) || 0,
-            session_duration_avg: parseFloat(row.session_duration_avg) || 0,
-            usb_count: parseInt(row.usb_connect) || parseInt(row.usb_disconnect) || 0,
-            usb_connect: parseInt(row.usb_connect) || 0,
-            usb_disconnect: parseInt(row.usb_disconnect) || 0,
-            file_activity_count: parseInt(row.total_file_operations) || parseInt(row.file_activity_count) || 0,
-            file_opened: parseInt(row.file_opened) || 0,
-            file_copied: parseInt(row.file_copied) || 0,
-            file_deleted: parseInt(row.file_deleted) || 0,
-            file_downloaded: parseInt(row.file_downloaded) || 0,
-            file_uploaded: parseInt(row.file_uploaded) || 0,
-            file_edited: parseInt(row.file_edited) || 0,
-            total_file_operations: parseInt(row.total_file_operations) || 0,
-            sensitive_files_accessed: parseInt(row.sensitive_files_accessed) || 0,
-            unique_files_accessed: parseInt(row.unique_files_accessed) || 0,
-            systems_accessed: row.systems_accessed || '',
-            file_operations_detail: row.file_operations_detail || '',
-            emails_sent: parseInt(row.emails_sent) || 0,
+            usb_count: parseInt(row.usb_connect) || 0,
+            file_activity_count: parseInt(row.total_file_operations) || 0,
             external_mails: parseInt(row.external_mails) || 0,
-            email_attachments: parseInt(row.email_attachments) || 0,
-            avg_email_size: parseFloat(row.avg_email_size) || 0,
-            http_requests: parseInt(row.http_requests) || 0,
-            unique_urls: parseInt(row.unique_urls) || 0,
-            cctv_anomalies: parseInt(row.cctv_anomalies) || 0,
-            access_card_anomalies: parseInt(row.access_card_anomalies) || 0,
-            behavioral_score: parseFloat(row.behavioral_score) || 50,
-            anomaly_label: parseInt(row.anomaly_label) || 1,
             risk_score: parseFloat(row.risk_score) || 0,
-            risk_profile: row.risk_profile,
-            logoff_count: parseInt(row.logoff_count) || parseInt(row.login_count) || 0,
-            file_accessed: parseInt(row.file_accessed) || 0,
-            file_events: parseInt(row.file_events) || 0,
-            unique_files: parseInt(row.unique_files) || 0,
-            avg_filename_length: parseFloat(row.avg_filename_length) || 0,
-            attachments: parseInt(row.attachments) || 0,
-            O: parseInt(row.O) || 0,
-            C: parseInt(row.C) || 0,
-            E: parseInt(row.E) || 0,
-            A: parseInt(row.A) || 0,
-            N: parseInt(row.N) || 0,
+            anomaly_label: row.anomaly_label ? parseInt(row.anomaly_label) : 0,
+            O: parseFloat(row.O) || 50,
+            C: parseFloat(row.C) || 50,
+            E: parseFloat(row.E) || 50,
+            A: parseFloat(row.A) || 50,
+            N: parseFloat(row.N) || 50,
+            date: row.date || new Date().toISOString()
           });
         }
-      } catch (error) {
-        skippedRows++;
+      } catch (e) {
+        console.error('Error parsing row:', e);
       }
     }
 
-    const data = Array.from(employeeMap.values());
-    console.log(`✅ Parsing complete: ${data.length} unique employees from ${lines.length - 1} rows`);
-    return data;
+    return Array.from(employeeMap.values());
   };
 
-  // Proper CSV line parser that handles quoted fields
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
-
-      if (char === '"') {
-        if (inQuotes && nextChar === '"') {
-          // Escaped quote
-          current += '"';
-          i++; // Skip next quote
-        } else {
-          // Toggle quote state
-          inQuotes = !inQuotes;
-        }
-      } else if (char === ',' && !inQuotes) {
-        // Field separator
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-
-    // Add the last field
-    result.push(current.trim());
-    
-    // Remove surrounding quotes from fields if they exist
-    return result.map(field => {
-      if (field.startsWith('"') && field.endsWith('"')) {
-        return field.slice(1, -1);
-      }
-      return field;
-    });
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      alert('Please select a file first');
-      return;
-    }
-
-    // Check file size before attempting to read
-    if (selectedFile.size === 0) {
-      console.error('❌ Selected file is empty (0 bytes)');
-      alert('The selected file is empty (0 bytes). Please choose a valid CSV file with data.');
-      setUploading(false);
-      return;
-    }
-
-    console.log('✅ File selected:', selectedFile.name, 'Size:', selectedFile.size, 'bytes');
-
-    setUploading(true);
-    setProgress(0);
-    setStatusText(scanStates[0]);
+    setCSVUploading(true);
+    setProcessingStep('📊 Loading behavioral data...');
 
     try {
-      // Use FileReader with ArrayBuffer for large files
-      const reader = new FileReader();
+      const text = await file.text();
+      const employees = parseCSV(text);
       
-      reader.onload = (event) => {
-        try {
-          const buffer = event.target?.result as ArrayBuffer;
-          const byteLength = buffer?.byteLength || 0;
+      if (employees.length === 0) {
+        setProcessingStep('❌ No valid employee data found in CSV');
+        return;
+      }
 
-          if (!buffer || byteLength === 0) {
-            console.error('❌ File content is empty');
-            alert('File appears to be empty. Please check the CSV file.');
-            setUploading(false);
-            return;
-          }
-
-          const text = new TextDecoder('utf-8').decode(buffer);
-          console.log('📄 CSV file loaded, size:', text.length, 'bytes');
-
-          const parsedData = parseCSV(text);
-          console.log('✅ CSV parsed successfully:', parsedData.length, 'employees');
-
-          if (parsedData.length === 0) {
-            console.error('❌ No data parsed from CSV');
-            alert('No valid data found in CSV. Please check the format.');
-            setUploading(false);
-            return;
-          }
-
-          // Log first and last employee to verify parsing
-          console.log('📊 First employee:', parsedData[0]);
-          console.log('📊 Last employee:', parsedData[parsedData.length - 1]);
-
-          // Fast progress simulation (completes in 3-5 seconds)
-          let p = 0;
-          let completed = false;
-          const startTime = Date.now();
-          const processingStartTime = startTime;
-          
-          const interval = setInterval(() => {
-            if (completed) {
-              clearInterval(interval);
-              return;
-            }
-            
-            const elapsed = Date.now() - startTime;
-            // Faster progress: 100% in 3 seconds
-            p = Math.min(100, (elapsed / 3000) * 100);
-            setProgress(Math.round(p));
-
-            const statusIdx = Math.min(Math.floor((p / 100) * scanStates.length), scanStates.length - 1);
-            setStatusText(scanStates[statusIdx]);
-
-            if (elapsed >= 3000 && !completed) {
-              completed = true;
-              clearInterval(interval);
-              setProgress(100);
-              const processingTime = Date.now() - processingStartTime;
-              console.log('💾 Setting employee data in context with', parsedData.length, 'records');
-              console.log('⚡ Fast processing completed in:', processingTime, 'ms');
-              
-              try {
-                // Set employee data to trigger risk assessment generation
-                setEmployeeData(parsedData);
-                console.log('✅ Employee data set successfully');
-                
-                // Wait a moment to ensure UI updates, then transition
-                setTimeout(() => {
-                  console.log('🎯 Transitioning to Risk Assessment tab');
-                  setUploading(false);
-                  setProgress(0);
-                  setStatusText('');
-                  setSelectedFile(null);
-                  // This triggers the tab switch in Dashboard
-                  console.log('📍 Calling onScanComplete()');
-                  onScanComplete();
-                  console.log('✅ onScanComplete() called - should switch tabs now');
-                }, 100);
-              } catch (error) {
-                console.error('❌ Error during completion:', error);
-                alert('Error processing data: ' + (error as any).message);
-                setUploading(false);
-                setProgress(0);
-                setStatusText('');
-              }
-            }
-          }, 50);
-        } catch (error) {
-          console.error('❌ Error in FileReader onload:', error);
-          setUploading(false);
-          alert('Error processing the file: ' + (error as any).message);
-        }
-      };
-
-      reader.onerror = (error) => {
-        console.error('❌ FileReader error:', error);
-        setUploading(false);
-        alert('Error reading file: ' + error);
-      };
-
-      console.log('📖 Starting FileReader...');
-      reader.readAsArrayBuffer(selectedFile);
+      setEmployeeData(employees);
+      setCSVFile(file);
+      setProcessingStep(`✅ Loaded ${employees.length} employees successfully!`);
+      setTimeout(() => setProcessingStep(''), 2000);
     } catch (error) {
-      console.error('❌ Error setting up file read:', error);
-      setUploading(false);
-      alert('Error processing the file. Please check the format.');
+      setProcessingStep('❌ Error loading CSV file');
+      console.error('CSV Error:', error);
+    } finally {
+      setCSVUploading(false);
+    }
+  };
+
+  const getEmployeeIdFromPath = (file: File): string => {
+    const relPath = (file as any).webkitRelativePath as string | undefined;
+    if (!relPath) {
+      return file.name.replace(/\.[^/.]+$/, '');
+    }
+    const parts = relPath.split('/').filter(Boolean);
+    if (parts.length >= 3) {
+      return parts[1];
+    }
+    if (parts.length === 2) {
+      return parts[1].replace(/\.[^/.]+$/, '');
+    }
+    return parts[0].replace(/\.[^/.]+$/, '');
+  };
+
+  const appendAuthorizedImages = (files: File[], idOverride?: string) => {
+    if (files.length === 0) return;
+    const ids = files.map(file => idOverride?.trim() || getEmployeeIdFromPath(file));
+    setAuthorizedImages(prev => [...prev, ...files]);
+    setAuthorizedImageIds(prev => [...prev, ...ids]);
+  };
+
+  const appendUnauthorizedImages = (files: File[], idOverride?: string) => {
+    if (files.length === 0) return;
+    const ids = files.map(file => idOverride?.trim() || getEmployeeIdFromPath(file));
+    setUnauthorizedImages(prev => [...prev, ...files]);
+    setUnauthorizedImageIds(prev => [...prev, ...ids]);
+  };
+
+  const handleAuthorizedImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    appendAuthorizedImages(files, authorizedSingleId);
+    e.target.value = '';
+  };
+
+  const handleUnauthorizedImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    appendUnauthorizedImages(files, unauthorizedSingleId);
+    e.target.value = '';
+  };
+
+  const handleAuthorizedFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    appendAuthorizedImages(files);
+    e.target.value = '';
+  };
+
+  const handleUnauthorizedFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
+    appendUnauthorizedImages(files);
+    e.target.value = '';
+  };
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVideoFile(file);
+    }
+  };
+
+  const processCCTVVideo = async () => {
+    if (!videoFile && !framesDir.trim()) {
+      setProcessingStep('❌ Please select a CCTV video or frames folder path');
+      return;
+    }
+
+    const hasImages = authorizedImages.length > 0 || unauthorizedImages.length > 0;
+    if (!hasImages) {
+      setProcessingStep('❌ Please upload at least one employee image (authorized or unauthorized)');
+      return;
+    }
+
+    setProcessing(true);
+    setProcessingStep('🎬 Initializing CCTV analysis...');
+
+    try {
+      const formData = new FormData();
+      if (videoFile) {
+        formData.append('video', videoFile);
+      }
+
+      // Add authorized images
+      authorizedImages.forEach((file) => {
+        formData.append('authorized_images', file);
+      });
+      
+      // Add authorized IDs
+      if (authorizedSingleId.trim()) {
+        formData.append('authorized_ids', authorizedSingleId.trim());
+      }
+      
+      // Add individual image IDs if provided
+      authorizedImageIds.forEach((id) => {
+        if (id) {
+          formData.append('authorized_image_ids', id);
+        }
+      });
+
+      // Add unauthorized images
+      unauthorizedImages.forEach((file) => {
+        formData.append('unauthorized_images', file);
+      });
+      
+      // Add unauthorized IDs
+      if (unauthorizedSingleId.trim()) {
+        formData.append('unauthorized_ids', unauthorizedSingleId.trim());
+      }
+      
+      // Add individual image IDs if provided
+      unauthorizedImageIds.forEach((id) => {
+        if (id) {
+          formData.append('unauthorized_image_ids', id);
+        }
+      });
+
+      if (framesDir.trim()) {
+        formData.append('frames_dir', framesDir.trim());
+      }
+
+      setProcessingStep('🔍 Detecting faces in video...');
+      
+      const response = await fetch(`${FACE_API_URL}/analyze`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = data?.message || data?.detail || `Backend error (${response.status})`;
+        throw new Error(message);
+      }
+      
+      // Check for backend error in response
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+      
+      setProcessingStep('📊 Correlating with risk scores...');
+      
+      // Backend returns 'cctv_stats' with aggregated detection data
+      const cctvStats = data?.cctv_stats || [];
+      
+      // Combine with risk data from behavioral analysis and CCTV patterns
+      const enrichedResults = cctvStats.map((stat: any) => {
+        const empData = employeeData.find(emp => emp.user === stat.employee_id);
+        
+        // Calculate CCTV-based risk factors
+        const detectionFrequency = stat.detection_count / (data.total_frames / 10); // Normalize by processed frames
+        const frequencyRisk = Math.min(30, detectionFrequency * 100); // High frequency = higher risk
+        const unauthorizedBonus = stat.authorized ? 0 : 40; // Unauthorized person detected
+        const lowConfidenceRisk = stat.avg_confidence < 0.7 ? 15 : 0; // Low confidence suggests evasion
+        
+        // Combine behavioral risk with CCTV risk
+        const behavioralRisk = empData?.risk_score || 0;
+        const cctvRisk = frequencyRisk + unauthorizedBonus + lowConfidenceRisk;
+        const combinedRiskScore = Math.min(100, behavioralRisk * 0.6 + cctvRisk * 0.4);
+        
+        return {
+          employeeId: stat.employee_id,
+          status: stat.authorized ? 'authorized' : 'unauthorized',
+          confidence: stat.avg_confidence * 100,
+          detectionCount: stat.detection_count,
+          firstSeen: `Frame ${stat.first_seen_frame}`,
+          lastSeen: `Frame ${stat.last_seen_frame}`,
+          riskScore: Math.round(combinedRiskScore),
+          behavioralRisk: Math.round(behavioralRisk),
+          cctvRisk: Math.round(cctvRisk),
+          department: empData?.department || 'Unknown',
+          name: empData?.name || stat.employee_id
+        };
+      });
+
+      setCCTVResults(enrichedResults);
+      
+      if (enrichedResults.length === 0) {
+        setProcessingStep('⚠️ Analysis complete - No face matches found. Try adjusting image quality or providing more reference photos.');
+      } else {
+        setProcessingStep(`✅ CCTV analysis complete! Found ${enrichedResults.length} face match(es).`);
+      }
+      
+      setScanComplete(true);
+      
+      setTimeout(() => {
+        onScanComplete();
+      }, 1500);
+    } catch (error) {
+      console.error('CCTV Analysis Error:', error);
+      const message = error instanceof Error ? error.message : 'Check backend logs and inputs.';
+      setProcessingStep(`❌ Face analysis failed: ${message}`);
+    } finally {
+      setProcessing(false);
     }
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-1000">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-slate-900/40 backdrop-blur-md p-10 rounded-[2rem] border border-slate-800/50 group hover:border-indigo-500/30 transition-all duration-500 shadow-2xl">
-          <div className="flex items-center space-x-4 mb-8">
-            <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center border border-indigo-500/20">
-              <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-black text-white italic tracking-tight">DATASET <span className="text-indigo-500">.CSV</span></h3>
-          </div>
-          <div className="relative group/upload border-2 border-dashed border-slate-800 rounded-3xl p-12 text-center hover:bg-slate-950 transition-all cursor-pointer">
-            <input type="file" accept=".csv,.txt" className="hidden" id="csv-upload" onChange={handleFileChange} />
-            <label htmlFor="csv-upload" className="cursor-pointer block">
-              <div className="bg-slate-900 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover/upload:scale-110 group-hover/upload:rotate-3 transition-all duration-500 border border-slate-800 shadow-xl">
-                <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-              </div>
-              <p className="text-sm font-bold text-slate-200 tracking-tight">
-                {selectedFile ? `Selected: ${selectedFile.name}` : 'Upload Threat Report'}
-              </p>
-              <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-widest">Supports DB exports & ML output</p>
-            </label>
-          </div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-indigo-900/80 to-purple-900/80 backdrop-blur-md p-8 rounded-2xl border border-indigo-500/20 shadow-xl">
+        <h1 className="text-3xl font-bold text-white mb-3 flex items-center gap-3">
+          📊 Complete Data Integration & CCTV Analysis
+        </h1>
+        <p className="text-indigo-200 text-lg">
+          Upload behavioral data, employee images, and CCTV footage. System combines all data sources for comprehensive threat assessment.
+        </p>
+      </div>
+
+      {/* Step 1: CSV Upload */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">1</div>
+          <h2 className="text-2xl font-bold text-white">Upload Behavioral Data (CSV)</h2>
         </div>
 
-        <div className="bg-slate-900/40 backdrop-blur-md p-10 rounded-[2rem] border border-slate-800/50 group hover:border-indigo-500/30 transition-all duration-500 shadow-2xl">
-          <div className="flex items-center space-x-4 mb-8">
-            <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center border border-indigo-500/20">
-              <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-black text-white italic tracking-tight">CCTV <span className="text-indigo-500">MEDIA</span></h3>
-          </div>
-          <div className="relative group/upload border-2 border-dashed border-slate-800 rounded-3xl p-12 text-center hover:bg-slate-950 transition-all cursor-pointer">
-            <input type="file" className="hidden" id="video-upload" />
-            <label htmlFor="video-upload" className="cursor-pointer block">
-              <div className="bg-slate-900 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover/upload:scale-110 group-hover/upload:-rotate-3 transition-all duration-500 border border-slate-800 shadow-xl">
-                <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <p className="text-sm font-bold text-slate-200 tracking-tight">Physical Surveillance</p>
-              <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-widest">MP4 / H.264 / Prerecorded</p>
+        <div className="space-y-4">
+          <div className="relative">
+            <input
+              type="file"
+              id="csv-upload"
+              accept=".csv,.txt"
+              onChange={handleCSVUpload}
+              disabled={csvUploading}
+              className="hidden"
+            />
+            <label
+              htmlFor="csv-upload"
+              className="flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 text-white rounded-xl cursor-pointer transition-all shadow-lg"
+            >
+              <Upload size={20} />
+              <span className="font-semibold">
+                {csvFile ? `✓ ${csvFile.name}` : 'Select CSV File'}
+              </span>
             </label>
+          </div>
+
+          {csvFile && (
+            <div className="bg-green-900/30 border border-green-500/30 p-4 rounded-xl flex items-center gap-3">
+              <CheckCircle2 className="text-green-400" size={20} />
+              <div>
+                <p className="text-green-200 font-semibold">✓ CSV Loaded</p>
+                <p className="text-green-300 text-sm">{employeeData.length} employees processed</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Step 2: Employee Images */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">2</div>
+          <h2 className="text-2xl font-bold text-white">Upload Employee Images</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Authorized Employees */}
+          <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+            <h3 className="text-xl font-semibold text-green-400 mb-4 flex items-center gap-2">
+              <Users size={24} />
+              Authorized Employees
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Employee ID (for all uploaded images)
+                </label>
+                <input
+                  type="text"
+                  value={authorizedSingleId}
+                  onChange={(e) => setAuthorizedSingleId(e.target.value)}
+                  placeholder="EMP001 or EMP001,EMP002,EMP003"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                />
+                <p className="text-xs text-slate-400 mt-1">Single ID for all images, or comma-separated for multiple. Folder uploads auto-detect from folder name.</p>
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="auth-images"
+                  multiple
+                  accept="image/*"
+                  onChange={handleAuthorizedImages}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="auth-images"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Upload Images ({authorizedImages.length} files)
+                </label>
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="auth-folder"
+                  multiple
+                  accept="image/*"
+                  onChange={handleAuthorizedFolder}
+                  className="hidden"
+                  {...({ webkitdirectory: 'true' } as any)}
+                />
+                <label
+                  htmlFor="auth-folder"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Upload Folder (auto ID)
+                </label>
+              </div>
+
+              {authorizedImages.length > 0 && (
+                <div className="bg-green-900/20 p-3 rounded-lg max-h-32 overflow-y-auto">
+                  <p className="text-xs text-green-300 font-semibold mb-2">Selected Files:</p>
+                  {authorizedImages.map((img, idx) => (
+                    <p key={`${img.name}-${idx}`} className="text-xs text-green-200">
+                      {authorizedImageIds[idx] || 'UNKNOWN'} - {img.name}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Unauthorized Employees (Optional) */}
+          <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+            <h3 className="text-xl font-semibold text-red-400 mb-4 flex items-center gap-2">
+              <AlertCircle size={24} />
+              Unauthorized Employees (Optional)
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Employee ID (for all uploaded images)
+                </label>
+                <input
+                  type="text"
+                  value={unauthorizedSingleId}
+                  onChange={(e) => setUnauthorizedSingleId(e.target.value)}
+                  placeholder="THREAT001 or THREAT001,THREAT002"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                />
+                <p className="text-xs text-slate-400 mt-1">Single ID for all images, or comma-separated for multiple. Folder uploads auto-detect from folder name.</p>
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="unauth-images"
+                  multiple
+                  accept="image/*"
+                  onChange={handleUnauthorizedImages}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="unauth-images"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Upload Images ({unauthorizedImages.length} files)
+                </label>
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="unauth-folder"
+                  multiple
+                  accept="image/*"
+                  onChange={handleUnauthorizedFolder}
+                  className="hidden"
+                  {...({ webkitdirectory: 'true' } as any)}
+                />
+                <label
+                  htmlFor="unauth-folder"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-rose-700 hover:bg-rose-600 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Upload Folder (auto ID)
+                </label>
+              </div>
+
+              {unauthorizedImages.length > 0 && (
+                <div className="bg-red-900/20 p-3 rounded-lg max-h-32 overflow-y-auto">
+                  <p className="text-xs text-red-300 font-semibold mb-2">Selected Files:</p>
+                  {unauthorizedImages.map((img, idx) => (
+                    <p key={`${img.name}-${idx}`} className="text-xs text-red-200">
+                      {unauthorizedImageIds[idx] || 'UNKNOWN'} - {img.name}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col items-center pt-4 gap-4">
-        {uploading ? (
-          <div className="w-full max-w-2xl bg-slate-900/80 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl space-y-6">
-            <div className="flex justify-between items-end">
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Processing Intelligence</p>
-                <p className="text-lg font-bold text-white transition-all duration-300">{statusText}</p>
-              </div>
-              <p className="text-2xl font-black text-white font-mono">{progress}%</p>
+      {/* Step 3: CCTV Video */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">3</div>
+          <h2 className="text-2xl font-bold text-white">Upload CCTV Video</h2>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+            📍 Video Location: <code className="text-indigo-300 font-mono">F:\main project\SPi-main\real cctv\video</code>
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Frames folder (optional - backend local path)
+            </label>
+            <input
+              type="text"
+              value={framesDir}
+              onChange={(e) => setFramesDir(e.target.value)}
+              placeholder="F:\main project\SPi-main\real cctv\processed_output\frames\video_2"
+              className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            />
+            <p className="text-xs text-slate-400 mt-1">If provided, the backend will use frames instead of the video file.</p>
+          </div>
+
+          <div>
+            <input
+              type="file"
+              id="video-upload"
+              accept="video/*"
+              onChange={handleVideoSelect}
+              className="hidden"
+            />
+            <label
+              htmlFor="video-upload"
+              className="flex items-center justify-center gap-3 px-6 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+            >
+              <Camera size={20} />
+              Select CCTV Video ({videoFile ? '✓ ' + videoFile.name : 'Choose File'})
+            </label>
+          </div>
+
+          {videoFile && (
+            <div className="bg-purple-900/30 border border-purple-500/30 p-4 rounded-lg">
+              <p className="text-purple-200 font-semibold">📹 {videoFile.name}</p>
+              <p className="text-purple-300 text-sm">{(videoFile.size / (1024 * 1024)).toFixed(2)} MB</p>
             </div>
-            <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800">
-              <div 
-                className="bg-gradient-to-r from-indigo-600 to-indigo-400 h-full transition-all duration-150 relative" 
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-              </div>
+          )}
+        </div>
+      </div>
+
+      {/* Processing Status */}
+      {processingStep && (
+        <div className={`p-4 rounded-xl border ${
+          processingStep.includes('❌')
+            ? 'bg-red-900/50 border-red-500/30 text-red-200'
+            : processingStep.includes('✅')
+            ? 'bg-green-900/50 border-green-500/30 text-green-200'
+            : 'bg-blue-900/50 border-blue-500/30 text-blue-200'
+        } backdrop-blur-md flex items-center gap-3`}>
+          {!processingStep.includes('✅') && !processingStep.includes('❌') && (
+            <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+          )}
+          {processingStep}
+        </div>
+      )}
+
+      {/* Run Analysis Button */}
+      <div className="flex justify-center">
+        <button
+          onClick={processCCTVVideo}
+          disabled={(!videoFile && !framesDir.trim()) || processing || scanComplete || backendStatus !== 'connected'}
+          className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-indigo-500/20 disabled:shadow-none"
+        >
+          <Camera size={24} />
+          {scanComplete ? '✓ Analysis Complete' : backendStatus !== 'connected' ? '⚠️ Backend Unavailable' : 'Analyze Video'}
+        </button>
+      </div>
+
+      {/* Results Section */}
+      {cctvResults.length > 0 && (
+        <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+          <h2 className="text-2xl font-bold text-white mb-6">📊 CCTV Face Recognition Results</h2>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-green-900/30 border border-green-500/30 p-4 rounded-lg">
+              <p className="text-green-400 text-sm mb-1">Authorized</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'authorized').length}
+              </p>
+            </div>
+            <div className="bg-red-900/30 border border-red-500/30 p-4 rounded-lg">
+              <p className="text-red-400 text-sm mb-1">Unauthorized</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'unauthorized').length}
+              </p>
+            </div>
+            <div className="bg-yellow-900/30 border border-yellow-500/30 p-4 rounded-lg">
+              <p className="text-yellow-400 text-sm mb-1">Unknown</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'unknown').length}
+              </p>
+            </div>
+            <div className="bg-purple-900/30 border border-purple-500/30 p-4 rounded-lg">
+              <p className="text-purple-400 text-sm mb-1">High Risk</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.riskScore && r.riskScore >= 60).length}
+              </p>
             </div>
           </div>
-        ) : (
-          <button 
-            onClick={selectedFile ? handleUpload : undefined}
-            disabled={!selectedFile || uploading}
-            className={`group relative bg-indigo-600 hover:bg-indigo-500 text-white font-black py-5 px-20 rounded-2xl transition-all shadow-[0_15px_40px_-10px_rgba(79,70,229,0.5)] active:scale-95 uppercase tracking-tighter italic text-xl ${(!selectedFile || uploading) ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <span className="relative z-10">{selectedFile ? 'Initialize ML Analysis' : 'Select a CSV File First'}</span>
-            <div className="absolute inset-0 bg-white/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          </button>
-        )}
+
+          {/* Results Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Employee</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Status</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Confidence</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Combined Risk</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Behavioral</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">CCTV</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Detections</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cctvResults.map((result, idx) => (
+                  <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/50">
+                    <td className="py-3 px-4 text-white">{result.name}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        result.status === 'authorized' ? 'bg-green-900/50 text-green-300' :
+                        result.status === 'unauthorized' ? 'bg-red-900/50 text-red-300' :
+                        'bg-yellow-900/50 text-yellow-300'
+                      }`}>
+                        {result.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">{result.confidence?.toFixed(1)}%</td>
+                    <td className="py-3 px-4">
+                      <span className={`font-bold ${
+                        result.riskScore >= 60 ? 'text-red-400' :
+                        result.riskScore >= 30 ? 'text-yellow-400' :
+                        'text-green-400'
+                      }`}>
+                        {result.riskScore || 0}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-blue-400">{result.behavioralRisk || 0}</td>
+                    <td className="py-3 px-4 text-purple-400">{result.cctvRisk || 0}</td>
+                    <td className="py-3 px-4 text-slate-300">{result.detectionCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Backend Status */}
+      <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 text-xs text-slate-400 flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${backendStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+        Face Recognition: {backendStatus === 'connected' ? '✓ Connected to backend' : '⚠️ Backend unavailable'}
       </div>
     </div>
   );

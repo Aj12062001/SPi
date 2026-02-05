@@ -155,6 +155,54 @@ export interface BehavioralProfile {
   deviations: string[];
 }
 
+// ============ CCTV & Access Control ============
+export interface CCTVAccessEvent {
+  id: string;
+  detectedPersonId: string;
+  detectedPersonName?: string;
+  timestamp: string;
+  confidence: number; // 0-1 confidence score
+  authorized: boolean; // Is this person authorized to be there?
+  location?: string;
+  duration?: number; // seconds in frame
+  frameNumber?: number;
+}
+
+export interface CCTVAccessLog {
+  videoId: string;
+  uploadedAt: string;
+  totalFrames: number;
+  duration: number; // seconds
+  accessEvents: CCTVAccessEvent[];
+  authorizedEmployees: string[]; // List of employee IDs allowed
+  unauthorizedAccesses: CCTVAccessEvent[]; // Quick reference for violations
+}
+
+export interface UnifiedSpyProfile {
+  user: string;
+  employee_name?: string;
+  department?: string;
+  overallRiskScore: number;
+  riskLevel: RiskLevel;
+  
+  // CSV-based behavioral risk
+  csvRiskScore: number;
+  csvRiskFactors: string[];
+  
+  // CCTV-based access risk
+  accessRiskScore: number;
+  unauthorizedAccessCount: number;
+  unauthorizedAccessTimes: string[];
+  accessRiskFactors: string[];
+  
+  // Combined threat assessment
+  isSuspect: boolean; // True if both CSV + CCTV indicate threat
+  suspiciousness: 'low' | 'medium' | 'high' | 'critical'; // Combined classification
+  spyScore: number; // 0-100: likelihood of insider threat
+  evidence: string[]; // List of specific red flags
+  recommendations: string[];
+}
+
 // ============ Authentication ============
 export interface AuthState {
   isAuthenticated: boolean;

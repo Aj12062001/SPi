@@ -3,6 +3,7 @@ import { useData } from '../DataContext';
 import { EmployeeRisk, RiskLevel, ActivityLog } from '../types';
 import ActivityTimeline from './ActivityTimeline';
 import ActivityVisualization from './ActivityVisualization';
+import { Download, FileText } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, ComposedChart, Area, AreaChart
@@ -188,6 +189,110 @@ const UnifiedRiskDashboard: React.FC = () => {
       default: return '#6b7280';
     }
   };
+
+  // PDF Export Functions
+  const generatePDFContent = (title: string, employees: any[]) => {
+    const timestamp = new Date().toLocaleString();
+    let content = `
+=================================================================
+            SPi - INSIDER THREAT DETECTION SYSTEM
+               ${title}
+=================================================================
+Generated: ${timestamp}
+Total Records: ${employees.length}
+-----------------------------------------------------------------
+
+`;
+
+    employees.forEach((emp, idx) => {
+      const assessment = emp.assessment || riskAssessments.get(emp.user);
+      content += `
+${idx + 1}. EMPLOYEE PROFILE
+-----------------------------------------------------------------
+Employee ID:       ${emp.user || emp.user_id || 'N/A'}
+Name:              ${emp.employee_name || 'N/A'}
+Department:        ${emp.department || 'N/A'}
+Job Title:         ${emp.job_title || 'N/A'}
+
+RISK ASSESSMENT:
+  Overall Risk Score:     ${assessment?.overallRiskScore?.toFixed(2) || 'N/A'} / 100
+  Risk Level:             ${assessment?.riskLevel || 'N/A'}
+  File Activity Risk:     ${assessment?.fileActivityRisk?.toFixed(2) || 'N/A'}
+  USB Activity Risk:      ${assessment?.usbActivityRisk?.toFixed(2) || 'N/A'}
+  Login Pattern Risk:     ${assessment?.loginPatternRisk?.toFixed(2) || 'N/A'}
+  Email Activity Risk:    ${assessment?.emailActivityRisk?.toFixed(2) || 'N/A'}
+  Behavioral Risk:        ${assessment?.behavioralRisk?.toFixed(2) || 'N/A'}
+
+ACTIVITY METRICS:
+  Login Count:       ${emp.login_count || 0}
+  Night Logins:      ${emp.night_logins || 0}
+  File Operations:   ${emp.file_activity_count || 0}
+  USB Connections:   ${emp.usb_count || 0}
+  External Emails:   ${emp.external_mails || 0}
+  
+PERSONALITY TRAITS (OCEAN):
+  Openness:          ${emp.O?.toFixed(2) || 'N/A'}
+  Conscientiousness: ${emp.C?.toFixed(2) || 'N/A'}
+  Extraversion:      ${emp.E?.toFixed(2) || 'N/A'}
+  Agreeableness:     ${emp.A?.toFixed(2) || 'N/A'}
+  Neuroticism:       ${emp.N?.toFixed(2) || 'N/A'}
+
+-----------------------------------------------------------------
+`;
+    });
+
+    content += `
+=================================================================
+                    END OF REPORT
+=================================================================
+`;
+    return content;
+  };
+
+  const downloadPDF = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportAllEmployees = () => {
+    const content = generatePDFContent('COMPLETE EMPLOYEE RISK REPORT', filteredEmployees);
+    downloadPDF(`spi-all-employees-${new Date().toISOString().split('T')[0]}.txt`, content);
+  };
+
+  const exportHighRisk = () => {
+    const highRiskEmployees = filteredEmployees.filter(
+      emp => emp.assessment?.riskLevel === RiskLevel.HIGH
+    );
+    const content = generatePDFContent('HIGH RISK EMPLOYEES REPORT', highRiskEmployees);
+    downloadPDF(`spi-high-risk-${new Date().toISOString().split('T')[0]}.txt`, content);
+  };
+
+  const exportMediumRisk = () => {
+    const mediumRiskEmployees = filteredEmployees.filter(
+      emp => emp.assessment?.riskLevel === RiskLevel.MEDIUM
+    );
+    const content = generatePDFContent('MEDIUM RISK EMPLOYEES REPORT', mediumRiskEmployees);
+    downloadPDF(`spi-medium-risk-${new Date().toISOString().split('T')[0]}.txt`, content);
+  };
+
+  const exportLowRisk = () => {
+    const lowRiskEmployees = filteredEmployees.filter(
+      emp => emp.assessment?.riskLevel === RiskLevel.LOW
+    );
+    const content = generatePDFContent('LOW RISK EMPLOYEES REPORT', lowRiskEmployees);
+    downloadPDF(`spi-low-risk-${new Date().toISOString().split('T')[0]}.txt`, content);
+  };
+
+  const exportIndividualEmployee = (employee: any) => {
+    const content = generatePDFContent(`INDIVIDUAL EMPLOYEE REPORT - ${employee.employee_name || employee.user}`, [employee]);
+    downloadPDF(`spi-employee-${employee.user}-${new Date().toISOString().split('T')[0]}.txt`, content);
+  };
+
   return (
     <div className="space-y-8 pb-8">
       {/* KPI Cards - Clickable Buttons */}
@@ -259,6 +364,49 @@ const UnifiedRiskDashboard: React.FC = () => {
           </div>
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
+      </div>
+
+      {/* Export Section */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-6 rounded-2xl border border-slate-700">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <FileText size={24} />
+              Export Risk Reports
+            </h3>
+            <p className="text-slate-400 text-sm mt-1">Download detailed risk assessment reports</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <button
+            onClick={exportAllEmployees}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-indigo-500/20"
+          >
+            <Download size={18} />
+            All Employees ({riskCounts.total})
+          </button>
+          <button
+            onClick={exportHighRisk}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-red-500/20"
+          >
+            <Download size={18} />
+            High Risk ({riskCounts.high})
+          </button>
+          <button
+            onClick={exportMediumRisk}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-amber-500/20"
+          >
+            <Download size={18} />
+            Medium Risk ({riskCounts.medium})
+          </button>
+          <button
+            onClick={exportLowRisk}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-emerald-500/20"
+          >
+            <Download size={18} />
+            Low Risk ({riskCounts.low})
+          </button>
+        </div>
       </div>
 
       {/* View Tabs */}
@@ -662,15 +810,27 @@ const UnifiedRiskDashboard: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedUser(emp.user);
-                          }}
-                          className="text-indigo-400 hover:text-indigo-300 font-semibold text-xs"
-                        >
-                          View Details →
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUser(emp.user);
+                            }}
+                            className="text-indigo-400 hover:text-indigo-300 font-semibold text-xs"
+                          >
+                            View Details →
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportIndividualEmployee(emp);
+                            }}
+                            className="text-emerald-400 hover:text-emerald-300"
+                            title="Export Employee Report"
+                          >
+                            <Download size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

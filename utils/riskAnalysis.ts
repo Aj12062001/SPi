@@ -1,4 +1,4 @@
-import { EmployeeRisk, RiskAssessment, RiskLevel, ActivityLog } from '../types';
+import { EmployeeRisk, RiskAssessment, RiskLevel, ActivityLog, CCTVAccessLog, UnifiedSpyProfile } from '../types';
 import { getHighSeverityActivities, getAnomalousActivities } from './activityTracker';
 
 /**
@@ -127,6 +127,63 @@ export const generateRiskAssessment = (
   };
 
   return assessment;
+};
+
+/**
+ * Calculate combined risk score integrating behavioral data and CCTV detection patterns
+ */
+export const calculateCombinedRiskScore = (
+  behavioralRisk: number,
+  cctvData: {
+    detectionCount: number;
+    avgConfidence: number;
+    authorized: boolean;
+    durationFrames: number;
+    totalFrames: number;
+  }
+): { 
+  combinedScore: number; 
+  cctvRisk: number; 
+  breakdown: string[];
+} => {
+  const breakdown: string[] = [];
+  
+  // Detection frequency risk (0-30 points)
+  const detectionFrequency = cctvData.detectionCount / (cctvData.totalFrames / 10);
+  const frequencyRisk = Math.min(30, detectionFrequency * 100);
+  if (frequencyRisk > 20) {
+    breakdown.push(`High detection frequency: ${cctvData.detectionCount} detections`);
+  }
+  
+  // Unauthorized access bonus (0-40 points)
+  const unauthorizedBonus = cctvData.authorized ? 0 : 40;
+  if (!cctvData.authorized) {
+    breakdown.push('CRITICAL: Unauthorized person detected in restricted area');
+  }
+  
+  // Low confidence risk - may indicate disguise or evasion (0-15 points)
+  const lowConfidenceRisk = cctvData.avgConfidence < 0.7 ? 15 : 0;
+  if (cctvData.avgConfidence < 0.7) {
+    breakdown.push(`Low recognition confidence: ${Math.round(cctvData.avgConfidence * 100)}%`);
+  }
+  
+  // Extended presence risk (0-15 points)
+  const extendedPresenceRisk = Math.min(15, (cctvData.durationFrames / cctvData.totalFrames) * 30);
+  if (extendedPresenceRisk > 10) {
+    breakdown.push(`Extended presence detected across ${cctvData.durationFrames} frames`);
+  }
+  
+  // Calculate CCTV risk component
+  const cctvRisk = frequencyRisk + unauthorizedBonus + lowConfidenceRisk + extendedPresenceRisk;
+  
+  // Combine: 60% behavioral, 40% CCTV
+  const combinedScore = Math.min(100, behavioralRisk * 0.6 + cctvRisk * 0.4);
+  
+  return {
+    combinedScore: Math.round(combinedScore),
+    cctvRisk: Math.round(cctvRisk),
+    breakdown
+  };
 };
 
 /**
@@ -270,4 +327,240 @@ export const predictRiskTrend = (
   if (difference > 5) return 'increasing';
   if (difference < -5) return 'decreasing';
   return 'stable';
+};
+
+/**
+ * Calculate access control risk from CCTV data
+ */
+export const calculateAccessRisk = (
+  employee: EmployeeRisk,
+  cctvLog: CCTVAccessLog | null
+): { score: number; unauthorizedCount: number; times: string[]; factors: string[] } => {
+  const factors: string[] = [];
+  let unauthorizedCount = 0;
+  let score = 0;
+  const unauthorizedTimes: string[] = [];
+
+  if (!cctvLog || cctvLog.accessEvents.length === 0) {
+    return { score: 0, unauthorizedCount: 0, times: [], factors: [] };
+  }
+
+  // Find access events for this employee
+  const employeeAccesses = cctvLog.accessEvents.filter(
+    event => event.detectedPersonName === employee.employee_name || event.detectedPersonId === employee.user
+  );
+
+  if (employeeAccesses.length === 0) {
+    // No CCTV record for this employee - high risk if they should be monitored
+    if (employee.risk_score > 60) {
+      factors.push('No CCTV record found despite high behavioral risk');
+      score += 15;
+    }
+    return { score, unauthorizedCount, times: unauthorizedTimes, factors };
+  }
+
+  // Check for unauthorized accesses
+  const unauthorizedAccesses = employeeAccesses.filter(event => !event.authorized);
+  unauthorizedCount = unauthorizedAccesses.length;
+
+  if (unauthorizedCount > 0) {
+    unauthorizedAccesses.forEach(event => {
+      unauthorizedTimes.push(event.timestamp);
+      score += 25; // Each unauthorized access adds significant risk
+      factors.push(`Unauthorized access at ${event.timestamp} (confidence: ${(event.confidence * 100).toFixed(0)}%)`);
+    });
+  }
+
+  // Low confidence matches are also suspicious
+  const lowConfidenceAccesses = employeeAccesses.filter(event => event.confidence < 0.7 && event.confidence > 0.3);
+  if (lowConfidenceAccesses.length > 0) {
+    score += lowConfidenceAccesses.length * 8;
+    factors.push(`${lowConfidenceAccesses.length} low-confidence face matches detected`);
+  }
+
+  // Excessive access attempts (normal employees rarely appear multiple times on CCTV)
+  if (employeeAccesses.length > 5) {
+    score += 10;
+    factors.push(`Excessive CCTV appearances (${employeeAccesses.length}x) - possible surveillance evasion`);
+  }
+
+  // Access outside business hours
+  const nightAccesses = employeeAccesses.filter(event => {
+    const hour = new Date(event.timestamp).getHours();
+    return hour < 6 || hour > 20;
+  });
+  if (nightAccesses.length > 0) {
+    score += nightAccesses.length * 12;
+    factors.push(`${nightAccesses.length} access event(s) detected during off-hours`);
+  }
+
+  return {
+    score: Math.min(100, score),
+    unauthorizedCount,
+    times: unauthorizedTimes,
+    factors
+  };
+};
+
+/**
+ * Generate unified spy profile combining CSV + CCTV data
+ */
+export const generateSpyProfile = (
+  employee: EmployeeRisk,
+  cctvLog: CCTVAccessLog | null = null,
+  activityLogs: ActivityLog[] = []
+): UnifiedSpyProfile => {
+  // CSV-based behavioral risk
+  const csvRiskScore = calculateRiskScore(employee);
+  const csvRiskLevel = getRiskLevel(csvRiskScore);
+  
+  const csvRiskFactors: string[] = [];
+  if (employee.file_activity_count > 500) csvRiskFactors.push('Excessive file operations');
+  if (employee.night_logins > 5) csvRiskFactors.push('Frequent night-time logins');
+  if (employee.usb_count > 20) csvRiskFactors.push('High USB device usage');
+  if (employee.external_mails || 0 > 50) csvRiskFactors.push('Excessive external email communication');
+  if (employee.anomaly_label === -1) csvRiskFactors.push('ML model anomaly detection flag');
+  
+  // CCTV-based access risk
+  const accessRisk = calculateAccessRisk(employee, cctvLog);
+  const accessRiskFactors = accessRisk.factors;
+
+  // Combine scores with weighted average
+  // CSV contributes 60%, CCTV contributes 40% (CCTV is direct evidence)
+  const combinedScore = (csvRiskScore * 0.6 + accessRisk.score * 0.4);
+
+  // Determine suspiciousness level
+  let suspiciousness: 'low' | 'medium' | 'high' | 'critical' = 'low';
+  if (combinedScore >= 80) {
+    suspiciousness = 'critical';
+  } else if (combinedScore >= 60) {
+    suspiciousness = 'high';
+  } else if (combinedScore >= 40) {
+    suspiciousness = 'medium';
+  }
+
+  // Spy score: probability this employee is an insider threat
+  // Higher if both CSV and CCTV have red flags (convergent evidence)
+  let spyScore = combinedScore;
+  const bothFlagged = csvRiskScore >= 60 && accessRisk.score >= 30;
+  const unauthorizedAccess = accessRisk.unauthorizedCount > 0;
+  
+  if (bothFlagged) {
+    spyScore = Math.min(100, spyScore * 1.3); // Boost if both systems flag
+  }
+  if (unauthorizedAccess) {
+    spyScore = Math.min(100, spyScore * 1.5); // Critical boost for unauthorized access
+  }
+
+  // Determine if suspect (both behavioral AND access red flags)
+  const isSuspect = (csvRiskScore >= 60 && accessRisk.score >= 30) || unauthorizedAccess;
+
+  // Consolidate evidence
+  const evidence: string[] = [
+    ...csvRiskFactors.map(f => `🟥 BEHAVIOR: ${f}`),
+    ...accessRiskFactors.map(f => `🚨 ACCESS: ${f}`)
+  ];
+
+  // Generate actionable recommendations
+  const recommendations: string[] = [];
+  
+  if (unauthorizedAccess) {
+    recommendations.push('🔴 IMMEDIATE: Restrict all access credentials - unauthorized entry detected');
+    recommendations.push('Contact security: Review surveillance footage for duration and activities');
+  }
+  
+  if (csvRiskScore >= 70) {
+    recommendations.push('Escalate to management: Behavioral pattern matches insider threat profile');
+  }
+  
+  if (accessRisk.score >= 60) {
+    recommendations.push('Review CCTV logs: Multiple suspicious access patterns detected');
+  }
+
+  if (bothFlagged) {
+    recommendations.push('🚨 HIGH PRIORITY: Convergent evidence from behavioral + physical access - full investigation required');
+  }
+
+  recommendations.push('Preserve all digital evidence: logs, emails, file access history');
+  recommendations.push('Interview supervisor and colleagues about any suspicious behavior');
+
+  return {
+    user: employee.user,
+    employee_name: employee.employee_name || employee.user,
+    department: employee.department,
+    overallRiskScore: Math.round(combinedScore * 100) / 100,
+    riskLevel: suspiciousness === 'critical' || suspiciousness === 'high' ? RiskLevel.HIGH : (suspiciousness === 'medium' ? RiskLevel.MEDIUM : RiskLevel.LOW),
+    csvRiskScore: Math.round(csvRiskScore * 100) / 100,
+    csvRiskFactors,
+    accessRiskScore: Math.round(accessRisk.score * 100) / 100,
+    unauthorizedAccessCount: accessRisk.unauthorizedCount,
+    unauthorizedAccessTimes: accessRisk.times,
+    accessRiskFactors,
+    isSuspect,
+    suspiciousness,
+    spyScore: Math.round(spyScore * 100) / 100,
+    evidence,
+    recommendations
+  };
+};
+
+/**
+ * Identify spies from combined CSV + CCTV data
+ */
+export const identifySpies = (
+  employees: EmployeeRisk[],
+  cctvLogs: Map<string, CCTVAccessLog> = new Map()
+): UnifiedSpyProfile[] => {
+  const spyProfiles = employees
+    .map(emp => {
+      const cctvLog = cctvLogs.get(emp.user) || null;
+      return generateSpyProfile(emp, cctvLog, []);
+    })
+    .filter(profile => profile.isSuspect || profile.spyScore >= 60)
+    .sort((a, b) => b.spyScore - a.spyScore);
+
+  return spyProfiles;
+};
+
+/**
+ * Create summary report of potential threats
+ */
+export const generateThreatReport = (
+  spyProfiles: UnifiedSpyProfile[]
+): {
+  totalSuspects: number;
+  criticalThreats: UnifiedSpyProfile[];
+  highThreats: UnifiedSpyProfile[];
+  mediumThreats: UnifiedSpyProfile[];
+  summary: string;
+} => {
+  const criticalThreats = spyProfiles.filter(p => p.suspiciousness === 'critical');
+  const highThreats = spyProfiles.filter(p => p.suspiciousness === 'high');
+  const mediumThreats = spyProfiles.filter(p => p.suspiciousness === 'medium');
+
+  let summary = `INSIDER THREAT ANALYSIS REPORT\n`;
+  summary += `Generated: ${new Date().toISOString()}\n\n`;
+  summary += `THREAT SUMMARY:\n`;
+  summary += `- Critical Threats: ${criticalThreats.length}\n`;
+  summary += `- High Risk: ${highThreats.length}\n`;
+  summary += `- Medium Risk: ${mediumThreats.length}\n`;
+  summary += `- Total Suspects: ${spyProfiles.length}\n\n`;
+
+  if (criticalThreats.length > 0) {
+    summary += `🚨 CRITICAL THREATS:\n`;
+    criticalThreats.forEach((threat, idx) => {
+      summary += `${idx + 1}. ${threat.employee_name} (${threat.user})\n`;
+      summary += `   Spy Score: ${threat.spyScore}/100\n`;
+      summary += `   Behavioral Risk: ${threat.csvRiskScore}/100 | Access Risk: ${threat.accessRiskScore}/100\n`;
+      summary += `   Status: ${threat.unauthorizedAccessCount > 0 ? '⚠️ UNAUTHORIZED ACCESS DETECTED' : 'Monitoring Required'}\n\n`;
+    });
+  }
+
+  return {
+    totalSuspects: spyProfiles.length,
+    criticalThreats,
+    highThreats,
+    mediumThreats,
+    summary
+  };
 };

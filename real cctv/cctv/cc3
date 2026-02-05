@@ -1,0 +1,25 @@
+import cv2
+import numpy as np
+
+cap = cv2.VideoCapture("cctv_output.mp4")
+out = cv2.VideoWriter(
+    "cctv_styled.mp4",
+    cv2.VideoWriter_fourcc(*"mp4v"),
+    10,
+    (int(cap.get(3)), int(cap.get(4)))
+)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    noise = np.random.randint(0, 15, gray.shape, dtype="uint8")
+    cctv = cv2.add(gray, noise)
+    cctv = cv2.cvtColor(cctv, cv2.COLOR_GRAY2BGR)
+
+    out.write(cctv)
+
+cap.release()
+out.release()

@@ -1,0 +1,570 @@
+import React, { useState, useEffect } from 'react';
+import { useData } from '../DataContext';
+import { EmployeeRisk } from '../types';
+import { Upload, Camera, Users, AlertCircle, CheckCircle2, Folder } from 'lucide-react';
+
+interface DataInputProps {
+  onScanComplete: () => void;
+}
+
+interface CCTVAnalysisResult {
+  employeeId: string;
+  name: string;
+  status: 'authorized' | 'unauthorized' | 'unknown';
+  confidence: number;
+  detectionCount: number;
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
+const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
+  const { setEmployeeData, employeeData } = useData();
+  
+  // CSV Upload State
+  const [csvFile, setCSVFile] = useState<File | null>(null);
+  const [csvUploading, setCSVUploading] = useState(false);
+  
+  // Employee Images State
+  const [authorizedImages, setAuthorizedImages] = useState<File[]>([]);
+  const [unauthorizedImages, setUnauthorizedImages] = useState<File[]>([]);
+  const [authorizedIds, setAuthorizedIds] = useState('');
+  const [unauthorizedIds, setUnauthorizedIds] = useState('');
+  
+  // CCTV Video State
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPath, setVideoPath] = useState('');
+  
+  // Processing State
+  const [processing, setProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  const [cctvResults, setCCTVResults] = useState<CCTVAnalysisResult[]>([]);
+  const [scanComplete, setScanComplete] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'connected' | 'demo'>('demo');
+
+  const FACE_API_URL = 'http://localhost:8000';
+
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const response = await fetch(`${FACE_API_URL}/health`);
+        if (response.ok) {
+          const data = await response.json();
+          setBackendStatus(data?.face_recognition ? 'connected' : 'demo');
+        }
+      } catch {
+        setBackendStatus('demo');
+      }
+    };
+    checkBackend();
+  }, []);
+
+  // CSV Parsing functions
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.replace(/^"|"$/g, '').trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.replace(/^"|"$/g, '').trim());
+    return result;
+  };
+
+  const parseCSV = (csvText: string): EmployeeRisk[] => {
+    const lines = csvText.split('\n').filter(line => line.trim().length > 0);
+    if (lines.length <= 1) return [];
+
+    const headers = parseCSVLine(lines[0]);
+    const employeeMap = new Map<string, any>();
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values = parseCSVLine(lines[i]);
+        if (values.length < 6) continue;
+
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+
+        const userId = row.user_id || row.user;
+        if (!userId) continue;
+
+        if (employeeMap.has(userId)) {
+          const existing = employeeMap.get(userId);
+          existing.login_count = (existing.login_count || 0) + (parseInt(row.login_count) || 0);
+          existing.night_logins = (existing.night_logins || 0) + (parseInt(row.night_logins) || 0);
+          existing.usb_count = (existing.usb_count || 0) + (parseInt(row.usb_connect) || 0);
+          existing.file_activity_count = (existing.file_activity_count || 0) + (parseInt(row.total_file_operations) || 0);
+        } else {
+          employeeMap.set(userId, {
+            user: userId,
+            user_id: row.user_id || userId,
+            employee_name: row.employee_name || row.name || userId,
+            department: row.department || 'Unknown',
+            job_title: row.job_title || '',
+            login_count: parseInt(row.login_count) || 0,
+            night_logins: parseInt(row.night_logins) || 0,
+            usb_count: parseInt(row.usb_connect) || 0,
+            file_activity_count: parseInt(row.total_file_operations) || 0,
+            external_mails: parseInt(row.external_mails) || 0,
+            risk_score: parseFloat(row.risk_score) || 0,
+            anomaly_label: row.anomaly_label ? parseInt(row.anomaly_label) : 0,
+            O: parseFloat(row.O) || 50,
+            C: parseFloat(row.C) || 50,
+            E: parseFloat(row.E) || 50,
+            A: parseFloat(row.A) || 50,
+            N: parseFloat(row.N) || 50,
+            date: row.date || new Date().toISOString()
+          });
+        }
+      } catch (e) {
+        console.error('Error parsing row:', e);
+      }
+    }
+
+    return Array.from(employeeMap.values());
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCSVUploading(true);
+    setProcessingStep('📊 Loading behavioral data...');
+
+    try {
+      const text = await file.text();
+      const employees = parseCSV(text);
+      
+      if (employees.length === 0) {
+        setProcessingStep('❌ No valid employee data found in CSV');
+        return;
+      }
+
+      setEmployeeData(employees);
+      setCSVFile(file);
+      setProcessingStep(`✅ Loaded ${employees.length} employees successfully!`);
+      setTimeout(() => setProcessingStep(''), 2000);
+    } catch (error) {
+      setProcessingStep('❌ Error loading CSV file');
+      console.error('CSV Error:', error);
+    } finally {
+      setCSVUploading(false);
+    }
+  };
+
+  const handleAuthImageFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setAuthorizedImages(files);
+  };
+
+  const handleUnAuthImageFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setUnauthorizedImages(files);
+  };
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setVideoFile(file);
+    }
+  };
+
+  const processCCTVVideo = async () => {
+    if (!videoFile) {
+      setProcessingStep('❌ Please select a CCTV video');
+      return;
+    }
+
+    if (employeeData.length === 0) {
+      setProcessingStep('❌ Please load behavioral data first');
+      return;
+    }
+
+    setProcessing(true);
+    setProcessingStep('🎬 Initializing CCTV analysis...');
+
+    try {
+      const formData = new FormData();
+      formData.append('video', videoFile);
+      
+      // Add authorized images
+      authorizedImages.forEach(file => formData.append('authorized_images', file));
+      
+      // Add unauthorized images
+      unauthorizedImages.forEach(file => formData.append('unauthorized_images', file));
+      
+      formData.append('authorized_ids', authorizedIds);
+      formData.append('unauthorized_ids', unauthorizedIds);
+
+      setProcessingStep('🔍 Detecting faces in video...');
+      
+      const response = await fetch(`${FACE_API_URL}/analyze_with_risk`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) throw new Error('Backend error');
+
+      const data = await response.json();
+      
+      setProcessingStep('📊 Correlating with risk scores...');
+      
+      // Combine with risk data from behavioral analysis
+      const enrichedResults = data.results.map((result: any) => {
+        const empData = employeeData.find(emp => emp.user === result.employeeId);
+        return {
+          ...result,
+          riskScore: empData?.risk_score || result.riskScore || 0,
+          department: empData?.department || 'Unknown'
+        };
+      });
+
+      setCCTVResults(enrichedResults);
+      setProcessingStep('✅ CCTV analysis complete!');
+      setScanComplete(true);
+      
+      setTimeout(() => {
+        onScanComplete();
+      }, 1500);
+    } catch (error) {
+      console.error('CCTV Analysis Error:', error);
+      setProcessingStep('⚠️ Demo mode: Generating sample results...');
+      
+      // Generate demo results
+      const demoResults: CCTVAnalysisResult[] = [];
+      const authIds = authorizedIds.split(',').map(id => id.trim()).filter(id => id);
+      
+      authIds.slice(0, 3).forEach(id => {
+        const empData = employeeData.find(emp => emp.user === id);
+        demoResults.push({
+          employeeId: id,
+          name: empData?.employee_name || `Employee ${id}`,
+          status: 'authorized',
+          confidence: 0.85 + Math.random() * 0.14,
+          detectionCount: Math.floor(Math.random() * 20) + 5,
+          firstSeen: '00:00:15',
+          lastSeen: '00:08:42'
+        });
+      });
+
+      if (Math.random() > 0.3) {
+        demoResults.push({
+          employeeId: 'UNKNOWN_001',
+          name: 'Unknown Person',
+          status: 'unknown',
+          confidence: 0.45 + Math.random() * 0.3,
+          detectionCount: Math.floor(Math.random() * 10) + 1
+        });
+      }
+
+      setCCTVResults(demoResults);
+      setScanComplete(true);
+      
+      setTimeout(() => {
+        onScanComplete();
+      }, 1500);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-indigo-900/80 to-purple-900/80 backdrop-blur-md p-8 rounded-2xl border border-indigo-500/20 shadow-xl">
+        <h1 className="text-3xl font-bold text-white mb-3 flex items-center gap-3">
+          📊 Complete Data Integration & CCTV Analysis
+        </h1>
+        <p className="text-indigo-200 text-lg">
+          Upload behavioral data, employee images, and CCTV footage. System combines all data sources for comprehensive threat assessment.
+        </p>
+      </div>
+
+      {/* Step 1: CSV Upload */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">1</div>
+          <h2 className="text-2xl font-bold text-white">Upload Behavioral Data (CSV)</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div className="relative">
+            <input
+              type="file"
+              id="csv-upload"
+              accept=".csv,.txt"
+              onChange={handleCSVUpload}
+              disabled={csvUploading}
+              className="hidden"
+            />
+            <label
+              htmlFor="csv-upload"
+              className="flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 text-white rounded-xl cursor-pointer transition-all shadow-lg"
+            >
+              <Upload size={20} />
+              <span className="font-semibold">
+                {csvFile ? `✓ ${csvFile.name}` : 'Select CSV File'}
+              </span>
+            </label>
+          </div>
+
+          {csvFile && (
+            <div className="bg-green-900/30 border border-green-500/30 p-4 rounded-xl flex items-center gap-3">
+              <CheckCircle2 className="text-green-400" size={20} />
+              <div>
+                <p className="text-green-200 font-semibold">✓ CSV Loaded</p>
+                <p className="text-green-300 text-sm">{employeeData.length} employees processed</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Step 2: Employee Images */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">2</div>
+          <h2 className="text-2xl font-bold text-white">Upload Employee Images</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Authorized Employees */}
+          <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+            <h3 className="text-xl font-semibold text-green-400 mb-4 flex items-center gap-2">
+              <Users size={24} />
+              Authorized Employees
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Employee IDs (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={authorizedIds}
+                  onChange={(e) => setAuthorizedIds(e.target.value)}
+                  placeholder="EMP001, EMP002, EMP003"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="auth-images"
+                  multiple
+                  accept="image/*"
+                  onChange={handleAuthImageFolder}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="auth-images"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Select Images ({authorizedImages.length} files)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Unauthorized Employees (Optional) */}
+          <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+            <h3 className="text-xl font-semibold text-red-400 mb-4 flex items-center gap-2">
+              <AlertCircle size={24} />
+              Unauthorized Employees (Optional)
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Unauthorized IDs (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={unauthorizedIds}
+                  onChange={(e) => setUnauthorizedIds(e.target.value)}
+                  placeholder="THREAT001, THREAT002"
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="file"
+                  id="unauth-images"
+                  multiple
+                  accept="image/*"
+                  onChange={handleUnAuthImageFolder}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="unauth-images"
+                  className="flex items-center justify-center gap-3 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+                >
+                  <Folder size={20} />
+                  Select Images ({unauthorizedImages.length} files)
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 3: CCTV Video */}
+      <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">3</div>
+          <h2 className="text-2xl font-bold text-white">Upload CCTV Video</h2>
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm">
+            Video location: <code className="text-indigo-300 font-mono">F:\main project\SPi-main\real cctv\video</code>
+          </p>
+
+          <div>
+            <input
+              type="file"
+              id="video-upload"
+              accept="video/*"
+              onChange={handleVideoSelect}
+              className="hidden"
+            />
+            <label
+              htmlFor="video-upload"
+              className="flex items-center justify-center gap-3 px-6 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg cursor-pointer transition-all font-semibold"
+            >
+              <Camera size={20} />
+              Select CCTV Video ({videoFile ? '✓' : 'Choose File'})
+            </label>
+          </div>
+
+          {videoFile && (
+            <div className="bg-purple-900/30 border border-purple-500/30 p-4 rounded-lg">
+              <p className="text-purple-200 font-semibold">📹 {videoFile.name}</p>
+              <p className="text-purple-300 text-sm">{(videoFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Processing Status */}
+      {processingStep && (
+        <div className={`p-4 rounded-xl border ${
+          processingStep.includes('❌')
+            ? 'bg-red-900/50 border-red-500/30 text-red-200'
+            : processingStep.includes('✅')
+            ? 'bg-green-900/50 border-green-500/30 text-green-200'
+            : 'bg-blue-900/50 border-blue-500/30 text-blue-200'
+        } backdrop-blur-md flex items-center gap-3`}>
+          {!processingStep.includes('✅') && !processingStep.includes('❌') && (
+            <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+          )}
+          {processingStep}
+        </div>
+      )}
+
+      {/* Run Analysis Button */}
+      <div className="flex justify-center">
+        <button
+          onClick={processCCTVVideo}
+          disabled={!csvFile || !videoFile || processing || scanComplete}
+          className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-indigo-500/20 disabled:shadow-none"
+        >
+          <Camera size={24} />
+          {scanComplete ? '✓ Analysis Complete' : 'Run CCTV Analysis'}
+        </button>
+      </div>
+
+      {/* Results Section */}
+      {cctvResults.length > 0 && (
+        <div className="bg-slate-900/80 backdrop-blur-md p-8 rounded-2xl border border-slate-700">
+          <h2 className="text-2xl font-bold text-white mb-6">📊 CCTV Face Recognition Results</h2>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-green-900/30 border border-green-500/30 p-4 rounded-lg">
+              <p className="text-green-400 text-sm mb-1">Authorized</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'authorized').length}
+              </p>
+            </div>
+            <div className="bg-red-900/30 border border-red-500/30 p-4 rounded-lg">
+              <p className="text-red-400 text-sm mb-1">Unauthorized</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'unauthorized').length}
+              </p>
+            </div>
+            <div className="bg-yellow-900/30 border border-yellow-500/30 p-4 rounded-lg">
+              <p className="text-yellow-400 text-sm mb-1">Unknown</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.status === 'unknown').length}
+              </p>
+            </div>
+            <div className="bg-purple-900/30 border border-purple-500/30 p-4 rounded-lg">
+              <p className="text-purple-400 text-sm mb-1">High Risk</p>
+              <p className="text-3xl font-bold text-white">
+                {cctvResults.filter(r => r.riskScore >= 60).length}
+              </p>
+            </div>
+          </div>
+
+          {/* Results Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Employee</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Status</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Confidence</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Risk Score</th>
+                  <th className="text-left py-3 px-4 text-slate-300 font-semibold">Detections</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cctvResults.map((result, idx) => (
+                  <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/50">
+                    <td className="py-3 px-4 text-white">{result.name}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        result.status === 'authorized' ? 'bg-green-900/50 text-green-300' :
+                        result.status === 'unauthorized' ? 'bg-red-900/50 text-red-300' :
+                        'bg-yellow-900/50 text-yellow-300'
+                      }`}>
+                        {result.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">{(result.confidence * 100).toFixed(1)}%</td>
+                    <td className="py-3 px-4 font-bold text-white">{result.riskScore?.toFixed(1) || 'N/A'}</td>
+                    <td className="py-3 px-4 text-slate-300">{result.detectionCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Backend Status */}
+      <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 text-xs text-slate-400 flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${backendStatus === 'connected' ? 'bg-green-500' : 'bg-yellow-500'}`} />
+        Face Recognition: {backendStatus === 'connected' ? '✓ Connected to backend' : '⚠️ Demo mode (see results above)'}
+      </div>
+    </div>
+  );
+};
+
+export default DataInput;

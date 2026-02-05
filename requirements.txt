@@ -9,3 +9,7 @@ Pillow
 kivy
 kivy-garden
 plyer
+fastapi
+uvicorn
+python-multipart
+face-recognition

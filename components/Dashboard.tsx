@@ -25,7 +25,7 @@ const Dashboard: React.FC<DashboardProps> = ({ username, onLogout }) => {
       <Header username={username} onLogout={onLogout} />
       
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
-        <nav className="flex space-x-1 bg-slate-900/80 backdrop-blur-md p-1.5 rounded-2xl mb-10 w-fit border border-slate-800 shadow-xl">
+        <nav className="flex space-x-1 bg-slate-900/80 backdrop-blur-md p-1.5 rounded-2xl mb-10 w-fit border border-slate-800 shadow-xl overflow-x-auto">
           {[
             { id: 'intro', label: 'Overview', locked: false },
             { id: 'data', label: 'Data Ingestion', locked: false },
@@ -36,7 +36,7 @@ const Dashboard: React.FC<DashboardProps> = ({ username, onLogout }) => {
               key={tab.id}
               disabled={tab.locked}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2 ${
+              className={`relative px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
                 activeTab === tab.id 
                   ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)]' 
                   : tab.locked 
