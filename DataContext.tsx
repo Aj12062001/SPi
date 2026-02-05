@@ -62,6 +62,76 @@ const ENHANCED_EMPLOYEE_DATA: EmployeeRisk[] = [
   }
 ];
 
+// Generate mock activity data for employees (optimized for speed and low memory)
+const generateMockActivities = (employees: EmployeeRisk[]): ActivityLog[] => {
+  // For very large datasets, skip activity generation to save memory
+  if (employees.length > 100) {
+    console.log('⏩ Skipping activity generation for large dataset');
+    return [];
+  }
+  
+  const activities: ActivityLog[] = [];
+  const activityTypes: ActivityLog['activityType'][] = [
+    'file_opened', 'file_deleted', 'file_copied', 'file_modified', 'file_accessed',
+    'usb_connected', 'usb_disconnected', 'email_sent', 'login', 'logout'
+  ];
+  const severities: ActivityLog['severity'][] = ['low', 'medium', 'high', 'critical'];
+
+  console.log('🔨 Generating activities for', employees.length, 'employees...');
+
+  // Generate activities for each employee (reduced for faster processing)
+  employees.forEach((emp, empIndex) => {
+    // Minimal activities per employee for performance
+    const activitiesPerEmployee = Math.min(15, emp.file_activity_count || 10);
+    const baseDate = emp.date ? new Date(emp.date) : new Date();
+
+    for (let i = 0; i < activitiesPerEmployee; i++) {
+      const daysBack = Math.floor(Math.random() * 7);
+      const timestamp = new Date(baseDate);
+      timestamp.setDate(timestamp.getDate() - daysBack);
+      timestamp.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60));
+
+      const activityType = activityTypes[Math.floor(Math.random() * activityTypes.length)];
+      const isAnomalous = (emp.anomaly_label === 1 || emp.risk_score > 70) && Math.random() > 0.7;
+      
+      const severity: ActivityLog['severity'] = isAnomalous 
+        ? severities[Math.floor(Math.random() * 2) + 2] // high or critical for anomalies
+        : severities[Math.floor(Math.random() * 2)]; // low or medium for normal
+
+      const details: ActivityLog['details'] = {};
+
+      if (activityType === 'file_opened' || activityType === 'file_deleted' || 
+          activityType === 'file_copied' || activityType === 'file_modified' || activityType === 'file_accessed') {
+        const fileNames = ['report.pdf', 'data.xlsx', 'credentials.txt', 'confidential.doc', 'config.json', 'database.sql', 'archive.zip', 'analysis.ppt'];
+        details.fileName = fileNames[Math.floor(Math.random() * fileNames.length)];
+        details.fileSize = Math.floor(Math.random() * 5000000) + 1000;
+        details.filePath = `C:\\Users\\${emp.user}\\Documents\\${details.fileName}`;
+        details.isSensitive = Math.random() > 0.6;
+      } else if (activityType === 'usb_connected' || activityType === 'usb_disconnected') {
+        details.usbName = `USB_Device_${Math.floor(Math.random() * 10)}`;
+      } else if (activityType === 'email_sent') {
+        details.emailRecipients = Math.floor(Math.random() * 5) + 1;
+      }
+
+      activities.push({
+        id: `activity_${emp.user}_${i}_${empIndex}`,
+        userId: emp.user,
+        timestamp: timestamp.toISOString(),
+        activityType,
+        severity,
+        isAnomalous,
+        details,
+        duration: Math.floor(Math.random() * 300) + 10
+      });
+    }
+  });
+
+  // Sort by timestamp descending
+  return activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+};
+
+const ENHANCED_ACTIVITY_DATA = generateMockActivities(ENHANCED_EMPLOYEE_DATA);
+
 interface DataContextType {
   employeeData: EmployeeRisk[];
   setEmployeeData: (data: EmployeeRisk[]) => void;
@@ -87,7 +157,7 @@ export const useData = () => {
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [employeeData, setEmployeeDataState] = useState<EmployeeRisk[]>(ENHANCED_EMPLOYEE_DATA);
   const [riskAssessments, setRiskAssessments] = useState<Map<string, RiskAssessment>>(new Map());
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(ENHANCED_ACTIVITY_DATA);
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -106,10 +176,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (storedActivities) {
       try {
-        setActivityLogs(JSON.parse(storedActivities));
+        const activities = JSON.parse(storedActivities);
+        console.log('✅ Loaded activity logs from localStorage:', activities.length);
+        setActivityLogs(activities);
       } catch (error) {
         console.error('Error loading activity logs:', error);
+        setActivityLogs(ENHANCED_ACTIVITY_DATA);
       }
+    } else {
+      // If no stored activities, use the generated mock data
+      console.log('📋 Initialized with mock activity data:', ENHANCED_ACTIVITY_DATA.length, 'activities');
     }
   }, []);
 
@@ -123,29 +199,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const generateAssessmentsBatched = (employees: EmployeeRisk[]) => {
     const newAssessments = new Map<string, RiskAssessment>();
-    const BATCH_SIZE = 100; // Process 100 employees at a time
+    const startTime = performance.now();
+    
+    console.log('🚀 Starting risk assessment generation for', employees.length, 'employees');
+    
+    // For low-memory systems, process in very large batches and skip activity logs
+    const BATCH_SIZE = employees.length > 100 ? 1000 : 200;
     let processedCount = 0;
 
     const processBatch = (startIdx: number) => {
-      const endIdx = Math.min(startIdx + BATCH_SIZE, employees.length);
-      
-      for (let i = startIdx; i < endIdx; i++) {
-        const emp = employees[i];
-        const assessment = generateRiskAssessment(emp, activityLogs);
-        newAssessments.set(emp.user, assessment);
-        processedCount++;
-      }
+      try {
+        const endIdx = Math.min(startIdx + BATCH_SIZE, employees.length);
+        
+        // Always skip activity logs for bulk uploads to speed up processing
+        const logsForAssessment: ActivityLog[] = [];
+        
+        for (let i = startIdx; i < endIdx; i++) {
+          const emp = employees[i];
+          try {
+            const assessment = generateRiskAssessment(emp, logsForAssessment);
+            newAssessments.set(emp.user, assessment);
+          } catch (error) {
+            console.error('⚠️ Error assessing employee', emp.user, error);
+            // Continue with other employees even if one fails
+          }
+          processedCount++;
+        }
 
-      // Log every 10% progress
-      if (processedCount % Math.max(100, Math.floor(employees.length / 10)) === 0 || endIdx === employees.length) {
-        console.log(`📊 Risk assessments: ${processedCount}/${employees.length} (${Math.round((processedCount / employees.length) * 100)}%)`);
-      }
+        // Log progress
+        const progress = Math.round((processedCount / employees.length) * 100);
+        console.log(`⚡ Risk assessments: ${processedCount}/${employees.length} (${progress}%)`);
 
-      if (endIdx < employees.length) {
-        // Schedule next batch immediately with minimal delay
-        setTimeout(() => processBatch(endIdx), 0);
-      } else {
-        console.log('✅ All risk assessments generated');
+        if (endIdx < employees.length) {
+          // Use setTimeout(0) for better compatibility on low-memory systems
+          setTimeout(() => processBatch(endIdx), 0);
+        } else {
+          const elapsed = performance.now() - startTime;
+          console.log(`✅ All ${employees.length} risk assessments generated in ${elapsed.toFixed(0)}ms`);
+          setRiskAssessments(newAssessments);
+        }
+      } catch (error) {
+        console.error('❌ Critical error in batch processing:', error);
+        // Set whatever assessments we have so far
         setRiskAssessments(newAssessments);
       }
     };
@@ -154,8 +249,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setEmployeeData = (data: EmployeeRisk[]) => {
+    console.log('📋 setEmployeeData called with', data.length, 'employees');
     setEmployeeDataState(data);
     localStorage.setItem('employeeData', JSON.stringify(data));
+    
+    // For large datasets on low-memory systems, minimize activity generation
+    if (data.length > 100) {
+      // Skip activity generation for large datasets to save memory
+      // Activities will be generated on-demand when viewing specific employees
+      console.log('⚡ Large dataset detected - skipping bulk activity generation for performance');
+      setActivityLogs([]);
+      localStorage.setItem('activityLogs', JSON.stringify([]));
+    } else {
+      // Generate activities only for small datasets
+      const newActivities = generateMockActivities(data);
+      setActivityLogs(newActivities);
+      localStorage.setItem('activityLogs', JSON.stringify(newActivities));
+      console.log('📋 Generated', newActivities.length, 'activity logs for', data.length, 'employees');
+    }
   };
 
   const logUserActivity = (activity: Omit<ActivityLog, 'id' | 'timestamp'>) => {

@@ -252,29 +252,60 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
           console.log('📊 First employee:', parsedData[0]);
           console.log('📊 Last employee:', parsedData[parsedData.length - 1]);
 
-          // Simulate processing
+          // Fast progress simulation (completes in 3-5 seconds)
           let p = 0;
+          let completed = false;
+          const startTime = Date.now();
+          const processingStartTime = startTime;
+          
           const interval = setInterval(() => {
-            p += 2;
-            setProgress(p);
+            if (completed) {
+              clearInterval(interval);
+              return;
+            }
+            
+            const elapsed = Date.now() - startTime;
+            // Faster progress: 100% in 3 seconds
+            p = Math.min(100, (elapsed / 3000) * 100);
+            setProgress(Math.round(p));
 
             const statusIdx = Math.min(Math.floor((p / 100) * scanStates.length), scanStates.length - 1);
             setStatusText(scanStates[statusIdx]);
 
-            if (p >= 100) {
+            if (elapsed >= 3000 && !completed) {
+              completed = true;
               clearInterval(interval);
+              setProgress(100);
+              const processingTime = Date.now() - processingStartTime;
               console.log('💾 Setting employee data in context with', parsedData.length, 'records');
-              console.log('⏳ Risk assessments will be generated in batches...');
-              setEmployeeData(parsedData);
-              // Switch to results immediately
-              setTimeout(() => {
-                console.log('✅ Switching to Risk Assessment tab');
+              console.log('⚡ Fast processing completed in:', processingTime, 'ms');
+              
+              try {
+                // Set employee data to trigger risk assessment generation
+                setEmployeeData(parsedData);
+                console.log('✅ Employee data set successfully');
+                
+                // Wait a moment to ensure UI updates, then transition
+                setTimeout(() => {
+                  console.log('🎯 Transitioning to Risk Assessment tab');
+                  setUploading(false);
+                  setProgress(0);
+                  setStatusText('');
+                  setSelectedFile(null);
+                  // This triggers the tab switch in Dashboard
+                  console.log('📍 Calling onScanComplete()');
+                  onScanComplete();
+                  console.log('✅ onScanComplete() called - should switch tabs now');
+                }, 100);
+              } catch (error) {
+                console.error('❌ Error during completion:', error);
+                alert('Error processing data: ' + (error as any).message);
                 setUploading(false);
-                setSelectedFile(null);
-                onScanComplete();
-              }, 300);
+                setProgress(0);
+                setStatusText('');
+              }
             }
-          }, 80);
+          }, 50);
         } catch (error) {
           console.error('❌ Error in FileReader onload:', error);
           setUploading(false);
