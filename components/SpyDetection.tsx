@@ -145,16 +145,26 @@ const SpyDetection: React.FC = () => {
 
       {/* Suspects List */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredProfiles.map(suspect => (
+        {filteredProfiles.map(suspect => {
+          const isUnauthorized = suspect.unauthorizedAccessCount > 0;
+          return (
           <div
             key={suspect.user}
             onClick={() => setSelectedSuspect(selectedSuspect?.user === suspect.user ? null : suspect)}
             className={`p-4 rounded-lg border-2 transition cursor-pointer ${
-              selectedSuspect?.user === suspect.user
+              isUnauthorized 
+                ? 'border-red-500 bg-red-950/30 ring-2 ring-red-500/50 animate-pulse-slow'
+                : selectedSuspect?.user === suspect.user
                 ? 'border-blue-500 bg-blue-950/30'
                 : `border-slate-600 bg-slate-800/50 hover:border-slate-500 hover:bg-slate-800/70`
             }`}
           >
+            {/* CRITICAL Banner for Unauthorized */}
+            {isUnauthorized && (
+              <div className="bg-red-600 text-white px-3 py-1 rounded-t-lg -mx-4 -mt-4 mb-3 text-center font-bold text-sm">
+                🚨 CRITICAL: UNAUTHORIZED ACCESS DETECTED
+              </div>
+            )}
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
@@ -186,8 +196,10 @@ const SpyDetection: React.FC = () => {
 
             {/* Unauthorized Access Badge */}
             {suspect.unauthorizedAccessCount > 0 && (
-              <div className="bg-red-900/40 border border-red-500 rounded px-2 py-1 mb-3 text-xs font-semibold text-red-300">
-                🚨 {suspect.unauthorizedAccessCount} UNAUTHORIZED ACCESS EVENT(S)
+              <div className="bg-red-900/60 border-2 border-red-500 rounded px-3 py-2 mb-3 text-sm font-bold text-red-200 flex items-center gap-2 animate-pulse">
+                <span className="text-lg">🚨</span>
+                <span>{suspect.unauthorizedAccessCount} UNAUTHORIZED ACCESS EVENT(S)</span>
+                <span className="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">ACTION REQUIRED</span>
               </div>
             )}
 
@@ -203,7 +215,8 @@ const SpyDetection: React.FC = () => {
               </div>
             ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Detailed View */}

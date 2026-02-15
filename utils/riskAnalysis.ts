@@ -430,8 +430,11 @@ export const generateSpyProfile = (
   const combinedScore = (csvRiskScore * 0.6 + accessRisk.score * 0.4);
 
   // Determine suspiciousness level
+  // CRITICAL: Any unauthorized access is automatically critical
   let suspiciousness: 'low' | 'medium' | 'high' | 'critical' = 'low';
-  if (combinedScore >= 80) {
+  if (accessRisk.unauthorizedCount > 0) {
+    suspiciousness = 'critical'; // FORCE CRITICAL for unauthorized access
+  } else if (combinedScore >= 80) {
     suspiciousness = 'critical';
   } else if (combinedScore >= 60) {
     suspiciousness = 'high';
@@ -445,11 +448,11 @@ export const generateSpyProfile = (
   const bothFlagged = csvRiskScore >= 60 && accessRisk.score >= 30;
   const unauthorizedAccess = accessRisk.unauthorizedCount > 0;
   
-  if (bothFlagged) {
-    spyScore = Math.min(100, spyScore * 1.3); // Boost if both systems flag
-  }
   if (unauthorizedAccess) {
-    spyScore = Math.min(100, spyScore * 1.5); // Critical boost for unauthorized access
+    spyScore = Math.max(95, spyScore); // CRITICAL: Unauthorized = minimum 95/100 score
+    spyScore = Math.min(100, spyScore * 1.5); // Further boost
+  } else if (bothFlagged) {
+    spyScore = Math.min(100, spyScore * 1.3); // Boost if both systems flag
   }
 
   // Determine if suspect (both behavioral AND access red flags)
@@ -465,8 +468,11 @@ export const generateSpyProfile = (
   const recommendations: string[] = [];
   
   if (unauthorizedAccess) {
-    recommendations.push('🔴 IMMEDIATE: Restrict all access credentials - unauthorized entry detected');
-    recommendations.push('Contact security: Review surveillance footage for duration and activities');
+    recommendations.push('� CRITICAL ALERT: UNAUTHORIZED ACCESS DETECTED');
+    recommendations.push('🔴 IMMEDIATE ACTION: Suspend all access credentials and badges');
+    recommendations.push('📹 URGENT: Review complete CCTV footage for breach timeline');
+    recommendations.push('👮 SECURITY: Contact security team and law enforcement immediately');
+    recommendations.push('📝 FORENSICS: Preserve all digital evidence, logs, and access records');
   }
   
   if (csvRiskScore >= 70) {

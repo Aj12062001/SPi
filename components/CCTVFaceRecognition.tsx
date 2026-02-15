@@ -8,7 +8,7 @@ interface FaceDetectionResult {
   status: 'authorized' | 'unauthorized' | 'unknown';
   confidence: number;
   riskScore?: number;
-  riskLevel?: string;
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   department?: string;
   detectionCount: number;
   firstSeenTime?: string;
@@ -107,11 +107,15 @@ const CCTVFaceRecognition: React.FC = () => {
       // Simulate detecting unauthorized if any exist
       if (unauthorizedIds.length > 0 && Math.random() > 0.5) {
         const unauth = unauthorizedIds[0];
+        const empData = employeeData.find(e => e.user === unauth);
         detectedResults.push({
           employeeId: unauth,
-          employeeName: `Unauthorized ${unauth}`,
+          employeeName: empData?.employee_name || `Unauthorized ${unauth}`,
           status: 'unauthorized',
           confidence: 0.78,
+          riskScore: 100, // CRITICAL: Unauthorized = Maximum Risk
+          riskLevel: 'CRITICAL',
+          department: empData?.department || 'Unknown',
           detectionCount: Math.floor(Math.random() * 5) + 1,
           firstSeenTime: '00:05:30',
           lastSeenTime: '00:06:10'
@@ -172,6 +176,7 @@ const CCTVFaceRecognition: React.FC = () => {
 
   const getRiskColor = (level?: string) => {
     switch (level) {
+      case 'CRITICAL': return 'text-red-500';
       case 'HIGH': return 'text-red-400';
       case 'MEDIUM': return 'text-yellow-400';
       case 'LOW': return 'text-green-400';
@@ -180,8 +185,20 @@ const CCTVFaceRecognition: React.FC = () => {
   };
 
   const criticalThreats = results.filter(r => 
-    r.status === 'unauthorized' || (r.riskScore && r.riskScore >= 60)
+    r.status === 'unauthorized' || (r.riskScore && r.riskScore >= 80)
   );
+
+  // Force unauthorized employees to be displayed as CRITICAL
+  const displayResults = results.map(r => {
+    if (r.status === 'unauthorized') {
+      return {
+        ...r,
+        riskScore: r.riskScore || 100,
+        riskLevel: 'CRITICAL'
+      };
+    }
+    return r;
+  });
 
   return (
     <div className="space-y-8">
@@ -291,17 +308,33 @@ const CCTVFaceRecognition: React.FC = () => {
           </p>
           <div className="grid gap-3">
             {criticalThreats.map((threat, idx) => (
-              <div key={idx} className="bg-red-950/50 p-4 rounded-xl border border-red-400/30">
+              <div key={idx} className={`p-4 rounded-xl border-2 ${
+                threat.status === 'unauthorized' 
+                  ? 'bg-red-950/70 border-red-400 animate-pulse' 
+                  : 'bg-red-950/50 border-red-400/30'
+              }`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white font-bold">{threat.employeeName || threat.employeeId}</p>
-                    <p className="text-red-300 text-sm">
-                      {threat.status.toUpperCase()} • 
-                      {threat.riskScore && ` Risk: ${threat.riskScore.toFixed(1)} (${threat.riskLevel})`}
+                    <p className="text-white font-bold text-lg">
+                      {threat.status === 'unauthorized' && '🚨 '}
+                      {threat.employeeName || threat.employeeId}
                     </p>
+                    <p className="text-red-300 text-sm font-semibold">
+                      {threat.status === 'unauthorized' ? '⛔ UNAUTHORIZED ACCESS' : threat.status.toUpperCase()}
+                      {threat.riskScore && ` • Risk: ${threat.riskScore.toFixed(1)} (${threat.riskLevel})`}
+                    </p>
+                    {threat.status === 'unauthorized' && (
+                      <p className="text-red-200 text-xs mt-1 font-bold">
+                        ⚠️ IMMEDIATE SECURITY RESPONSE REQUIRED
+                      </p>
+                    )}
                   </div>
-                  <span className="px-3 py-1 bg-red-600 text-white rounded-full text-xs font-bold">
-                    PRIORITY
+                  <span className={`px-4 py-2 rounded-full text-xs font-bold ${
+                    threat.status === 'unauthorized'
+                      ? 'bg-red-600 text-white ring-2 ring-red-400 ring-offset-2 ring-offset-slate-900'
+                      : 'bg-red-600 text-white'
+                  }`}>
+                    {threat.status === 'unauthorized' ? '🚨 CRITICAL' : 'PRIORITY'}
                   </span>
                 </div>
               </div>
@@ -370,8 +403,12 @@ const CCTVFaceRecognition: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {results.map((result, idx) => (
-                  <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                {displayResults.map((result, idx) => (
+                  <tr key={idx} className={`border-b border-slate-800 transition-colors ${
+                    result.status === 'unauthorized' 
+                      ? 'bg-red-950/30 hover:bg-red-950/50 border-red-800' 
+                      : 'hover:bg-slate-800/50'
+                  }`}>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-3">
                         <User size={20} className="text-slate-400" />
@@ -391,9 +428,24 @@ const CCTVFaceRecognition: React.FC = () => {
                     </td>
                     <td className="py-4 px-4">
                       {result.riskScore ? (
-                        <span className={`font-bold ${getRiskColor(result.riskLevel)}`}>
-                          {result.riskScore.toFixed(1)} ({result.riskLevel})
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-lg ${
+                            result.status === 'unauthorized' ? 'text-red-400' : getRiskColor(result.riskLevel)
+                          }`}>
+                            {result.riskScore.toFixed(1)}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${
+                            result.status === 'unauthorized'
+                              ? 'bg-red-600 text-white'
+                              : result.riskLevel === 'HIGH'
+                              ? 'bg-red-500/30 text-red-400'
+                              : result.riskLevel === 'MEDIUM'
+                              ? 'bg-yellow-500/30 text-yellow-400'
+                              : 'bg-green-500/30 text-green-400'
+                          }`}>
+                            {result.status === 'unauthorized' ? 'CRITICAL' : result.riskLevel}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-slate-500">N/A</span>
                       )}
