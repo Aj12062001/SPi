@@ -206,4 +206,3 @@ For questions, issues, or feature requests, please contact the development team 
 
 **SPi - Security Pattern Intelligence**  
 *Protecting organizations from insider threats with AI-powered detection*
-
