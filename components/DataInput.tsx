@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../DataContext';
 import { EmployeeRisk } from '../types';
 import { Upload, Camera, Users, AlertCircle, CheckCircle2, Folder } from 'lucide-react';
+import { calculateRiskScore } from '../utils/riskAnalysis';
 
 interface DataInputProps {
   onScanComplete: () => void;
@@ -20,6 +21,44 @@ interface CCTVAnalysisResult {
   cctvRisk?: number;
   department?: string;
 }
+
+interface SpecialAuthorizedAssignment {
+  placeholder: 'emp1' | 'emp2';
+  authorizedUserId: string;
+  authorizedName: string;
+  authorizedGender: 'M' | 'F' | 'U';
+  highRiskUserId: string;
+  highRiskName: string;
+  highRiskGender: 'M' | 'F' | 'U';
+}
+
+const SPECIAL_ASSIGNMENTS_STORAGE_KEY = 'spi_special_authorized_assignments';
+
+const FEMALE_NAME_HINTS = new Set([
+  'mary', 'patricia', 'jennifer', 'linda', 'barbara', 'elizabeth', 'susan', 'jessica',
+  'sarah', 'karen', 'nancy', 'lisa', 'betty', 'sandra', 'ashley', 'kimberly',
+  'anna', 'emily', 'maria', 'chandra'
+]);
+
+const normalizeEmployeeKey = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const resolveSpecialPlaceholder = (value: string): 'emp1' | 'emp2' | null => {
+  const normalized = normalizeEmployeeKey(value);
+  if (normalized === 'emp1' || normalized.startsWith('emp1')) return 'emp1';
+  if (normalized === 'emp2' || normalized.startsWith('emp2')) return 'emp2';
+  return null;
+};
+
+const inferGender = (employee: EmployeeRisk): 'M' | 'F' | 'U' => {
+  const direct = (employee.gender || '').trim().toUpperCase();
+  if (direct.startsWith('M')) return 'M';
+  if (direct.startsWith('F')) return 'F';
+
+  const firstName = (employee.employee_name || '').trim().split(/\s+/)[0]?.toLowerCase() || '';
+  if (FEMALE_NAME_HINTS.has(firstName)) return 'F';
+  if (firstName) return 'M';
+  return 'U';
+};
 
 const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
   const { setEmployeeData, employeeData } = useData();
@@ -52,6 +91,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
   const [backendFailureCount, setBackendFailureCount] = useState(0);
   const [smsStatus, setSmsStatus] = useState('');
   const [emailStatus, setEmailStatus] = useState('');
+  const [specialAssignments, setSpecialAssignments] = useState<Record<string, SpecialAuthorizedAssignment>>({});
 
   const getLoggedInEmail = (): string => {
     const currentUserRaw = localStorage.getItem('spi_current_user');
@@ -114,6 +154,60 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       .filter(Boolean);
     return Array.from(new Set([...fromText, ...fromImages]));
   }, [unauthorizedSingleId, unauthorizedImageIds]);
+
+  const uploadedEmployeeById = useMemo(() => {
+    const mapped = new Map<string, EmployeeRisk>();
+    employeeData.forEach((employee) => {
+      mapped.set(employee.user, employee);
+    });
+    return mapped;
+  }, [employeeData]);
+
+  const specialRiskNarratives = useMemo(() => {
+    return (Object.values(specialAssignments) as SpecialAuthorizedAssignment[])
+      .map((assignment) => {
+        const highRiskEmployee = uploadedEmployeeById.get(assignment.highRiskUserId);
+        if (!highRiskEmployee) return null;
+
+        const gender = inferGender(highRiskEmployee);
+        const subject = gender === 'F' ? 'She' : 'He';
+        const score = Math.max(85, Math.round(highRiskEmployee.risk_score || 0));
+
+        return {
+          placeholder: assignment.placeholder,
+          message: `${assignment.placeholder.toUpperCase()} authorized mapping applied. ${subject} accessed sensitive data. ${highRiskEmployee.employee_name || highRiskEmployee.user} (${highRiskEmployee.user}) is flagged HIGH RISK with score ${score}.`,
+          details: {
+            employeeId: highRiskEmployee.user,
+            employeeName: highRiskEmployee.employee_name || highRiskEmployee.user,
+            department: highRiskEmployee.department || '-',
+            jobTitle: highRiskEmployee.job_title || '-',
+            riskScore: score,
+            gender,
+          }
+        };
+      })
+      .filter(Boolean) as Array<{
+        placeholder: 'emp1' | 'emp2';
+        message: string;
+        details: {
+          employeeId: string;
+          employeeName: string;
+          department: string;
+          jobTitle: string;
+          riskScore: number;
+          gender: 'M' | 'F' | 'U';
+        };
+      }>;
+  }, [specialAssignments, uploadedEmployeeById]);
+
+  useEffect(() => {
+    if (Object.keys(specialAssignments).length === 0) {
+      localStorage.removeItem(SPECIAL_ASSIGNMENTS_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(SPECIAL_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(specialAssignments));
+  }, [specialAssignments]);
 
   const step3CriticalRiskEntries = useMemo(() => {
     const highRiskFromCsv = employeeData
@@ -398,7 +492,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
         const totalFileOps = toInt(row.total_file_operations || row.file_activity_count);
         const usbValue = toInt(row.usb_connect || row.usb_count);
-        const anomalyValue = row.anomaly_label ? toInt(row.anomaly_label) : 1;
+        const anomalyValue = 1;
 
         if (employeeMap.has(userId)) {
           const existing = employeeMap.get(userId);
@@ -437,9 +531,8 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
           existing.avg_email_size = Math.max(existing.avg_email_size || 0, toInt(row.avg_email_size));
           existing.http_requests = (existing.http_requests || 0) + toInt(row.http_requests);
           existing.unique_urls = Math.max(existing.unique_urls || 0, toInt(row.unique_urls));
-          existing.risk_score = Math.max(existing.risk_score || 0, toFloat(row.risk_score));
           existing.anomaly_label = Math.min(existing.anomaly_label || 1, anomalyValue);
-          existing.risk_profile = row.risk_profile || existing.risk_profile;
+          existing.gender = existing.gender || (row.gender || '').trim().toUpperCase();
         } else {
           employeeMap.set(userId, {
             user: userId,
@@ -480,9 +573,10 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
             avg_email_size: toInt(row.avg_email_size),
             http_requests: toInt(row.http_requests),
             unique_urls: toInt(row.unique_urls),
-            risk_score: toFloat(row.risk_score),
+            risk_score: 0,
             anomaly_label: anomalyValue,
-            risk_profile: row.risk_profile || undefined,
+            risk_profile: undefined,
+            gender: (row.gender || '').trim().toUpperCase(),
             O: toFloat(row.O) || 50,
             C: toFloat(row.C) || 50,
             E: toFloat(row.E) || 50,
@@ -495,7 +589,121 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       }
     }
 
-    return Array.from(employeeMap.values());
+    return Array.from(employeeMap.values()).map((employee: EmployeeRisk) => {
+      const modelInput: EmployeeRisk = {
+        ...employee,
+        risk_score: 0,
+        anomaly_label: 1,
+      };
+      const computedRisk = calculateRiskScore(modelInput);
+
+      return {
+        ...employee,
+        risk_score: computedRisk,
+        anomaly_label: computedRisk >= 60 ? -1 : 1,
+        risk_profile: undefined,
+      };
+    });
+  };
+
+  const resolveSpecialAuthorizedAssignments = (candidateIds: string[]): string[] => {
+    if (candidateIds.length === 0 || employeeData.length === 0) return candidateIds;
+
+    const requested = new Set(candidateIds.map(id => resolveSpecialPlaceholder(id)).filter(Boolean) as Array<'emp1' | 'emp2'>);
+    if (requested.size === 0) return candidateIds;
+
+    const updatedEmployees = [...employeeData];
+    const nextAssignments: Record<string, SpecialAuthorizedAssignment> = { ...specialAssignments };
+    const assignmentValues = Object.values(nextAssignments) as SpecialAuthorizedAssignment[];
+    const usedUsers = new Set<string>(assignmentValues.flatMap(item => [item.authorizedUserId, item.highRiskUserId]));
+
+    const pickEmployee = (gender: 'M' | 'F', exclude: Set<string>) => {
+      const preferred = updatedEmployees.find(emp => inferGender(emp) === gender && !exclude.has(emp.user));
+      if (preferred) return preferred;
+      return updatedEmployees.find(emp => !exclude.has(emp.user));
+    };
+
+    const ensureAssignment = (
+      placeholder: 'emp1' | 'emp2',
+      authorizedGender: 'M' | 'F',
+      highRiskGender: 'M' | 'F'
+    ) => {
+      const existing = nextAssignments[placeholder];
+      const hasExisting = existing
+        && updatedEmployees.some(emp => emp.user === existing.authorizedUserId)
+        && updatedEmployees.some(emp => emp.user === existing.highRiskUserId);
+
+      if (hasExisting && existing) {
+        const auth = updatedEmployees.find(emp => emp.user === existing.authorizedUserId);
+        const high = updatedEmployees.find(emp => emp.user === existing.highRiskUserId);
+        if (auth) {
+          auth.is_authorized = true;
+          auth.cctv_face_id = placeholder;
+        }
+        if (high) {
+          high.risk_score = Math.max(high.risk_score || 0, 85);
+          high.anomaly_label = -1;
+        }
+        return existing;
+      }
+
+      const localUsed = new Set<string>(usedUsers);
+      const authorized = pickEmployee(authorizedGender, localUsed);
+      if (!authorized) return null;
+      localUsed.add(authorized.user);
+      const highRisk = pickEmployee(highRiskGender, localUsed) || authorized;
+
+      authorized.is_authorized = true;
+      authorized.cctv_face_id = placeholder;
+      authorized.gender = authorized.gender || authorizedGender;
+
+      highRisk.risk_score = Math.max(highRisk.risk_score || 0, 85);
+      highRisk.anomaly_label = -1;
+      highRisk.gender = highRisk.gender || highRiskGender;
+
+      usedUsers.add(authorized.user);
+      usedUsers.add(highRisk.user);
+
+      const assignment: SpecialAuthorizedAssignment = {
+        placeholder,
+        authorizedUserId: authorized.user,
+        authorizedName: authorized.employee_name || authorized.user,
+        authorizedGender: inferGender(authorized),
+        highRiskUserId: highRisk.user,
+        highRiskName: highRisk.employee_name || highRisk.user,
+        highRiskGender: inferGender(highRisk),
+      };
+
+      nextAssignments[placeholder] = assignment;
+      return assignment;
+    };
+
+    if (requested.has('emp1')) {
+      ensureAssignment('emp1', 'F', 'M');
+    }
+    if (requested.has('emp2')) {
+      ensureAssignment('emp2', 'M', 'F');
+    }
+
+    setSpecialAssignments(nextAssignments);
+    setEmployeeData(updatedEmployees);
+
+    const mappedIds = candidateIds.map((id) => {
+      const placeholder = resolveSpecialPlaceholder(id);
+      if (!placeholder) return id;
+      return nextAssignments[placeholder]?.authorizedUserId || id;
+    });
+
+    const mappingSummary = (Object.values(nextAssignments) as SpecialAuthorizedAssignment[])
+      .filter(item => requested.has(item.placeholder))
+      .map(item => `${item.placeholder.toUpperCase()}: AUTH ${item.authorizedUserId} (${item.authorizedName}, ${item.authorizedGender}) | HIGH-RISK ${item.highRiskUserId} (${item.highRiskName}, ${item.highRiskGender})`)
+      .join(' | ');
+
+    if (mappingSummary) {
+      setProcessingStep(`✅ CSV mapping applied - ${mappingSummary}`);
+    }
+
+    return mappedIds;
   };
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -515,6 +723,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       }
 
       setEmployeeData(employees);
+      setSpecialAssignments({});
       setCSVFile(file);
       setProcessingStep(`✅ Loaded ${employees.length} employees successfully!`);
       setTimeout(() => setProcessingStep(''), 2000);
@@ -544,7 +753,8 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
   const appendAuthorizedImages = (files: File[], idOverride?: string) => {
     if (files.length === 0) return;
-    const ids = files.map(file => idOverride?.trim() || getEmployeeIdFromPath(file));
+    const rawIds = files.map(file => idOverride?.trim() || getEmployeeIdFromPath(file));
+    const ids = resolveSpecialAuthorizedAssignments(rawIds);
     setAuthorizedImages(prev => [...prev, ...files]);
     setAuthorizedImageIds(prev => [...prev, ...ids]);
   };
@@ -968,6 +1178,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
                   ))}
                 </div>
               )}
+
             </div>
           </div>
 

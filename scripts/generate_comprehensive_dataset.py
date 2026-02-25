@@ -11,16 +11,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 
-def _risk_profile(score: float) -> str:
-    if score >= 80:
-        return "critical"
-    if score >= 60:
-        return "high"
-    if score >= 30:
-        return "medium"
-    return "low"
-
-
 def _build_file_operations(
     operation_count: int,
     base_datetime: datetime,
@@ -118,8 +108,6 @@ def generate_dataset(num_records=10000, output_file="data/dummy_risk_10k.csv", d
         "access_card_anomalies",
         "behavioral_score",
         "anomaly_label",
-        "risk_score",
-        "risk_profile",
         "O",
         "C",
         "E",
@@ -199,17 +187,6 @@ def generate_dataset(num_records=10000, output_file="data/dummy_risk_10k.csv", d
             behavioral_score = round(random.uniform(15, 96), 2)
             anomaly_label = -1 if random.random() < 0.22 else 1
 
-            file_risk = summary["delete"] * 0.7 + summary["copy"] * 0.45 + summary["sensitive"] * 0.8
-            auth_risk = night_logins * 0.6 + usb_count * 0.35
-            comms_risk = external_mails * 0.25 + email_attachments * 0.14
-            db_risk = database_write_ops * 0.045 + database_session_duration * 0.03
-            web_risk = (unique_urls / max(1, http_requests)) * 18
-            anomaly_boost = 12 if anomaly_label == -1 else 0
-            behavior_penalty = (100 - behavioral_score) * 0.18
-
-            risk_score = round(min(100, max(0, file_risk + auth_risk + comms_risk + db_risk + web_risk + anomaly_boost + behavior_penalty)), 2)
-            risk_profile = _risk_profile(risk_score)
-
             writer.writerow(
                 [
                     user,
@@ -254,8 +231,6 @@ def generate_dataset(num_records=10000, output_file="data/dummy_risk_10k.csv", d
                     access_card_anomalies,
                     behavioral_score,
                     anomaly_label,
-                    risk_score,
-                    risk_profile,
                     random.randint(20, 95),
                     random.randint(20, 95),
                     random.randint(20, 95),

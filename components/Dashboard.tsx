@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import Header from './Header';
 import Introduction from './Introduction';
 import DataInput from './DataInput';
-import UnifiedRiskDashboard from './UnifiedRiskDashboard';
+import { UnifiedRiskDashboard } from './UnifiedRiskDashboard';
 import Analytics from './Analytics';
 
 interface DashboardProps {

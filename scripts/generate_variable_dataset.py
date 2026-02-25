@@ -126,15 +126,12 @@ def generate_dataset(num_employees=5000, days=30):
         if i < num_high:
             risk_profile = 'high'
             anomaly_label = -1
-            risk_score = random.uniform(60, 95)
         elif i < num_high + num_medium:
             risk_profile = 'medium'
             anomaly_label = random.choice([1, -1])
-            risk_score = random.uniform(30, 70)
         else:
             risk_profile = 'low'
             anomaly_label = 1
-            risk_score = random.uniform(5, 35)
 
         employees.append({
             "user_id": user_id,
@@ -142,8 +139,7 @@ def generate_dataset(num_employees=5000, days=30):
             "department": dept,
             "job_title": job_title,
             "risk_profile": risk_profile,
-            "anomaly_label": anomaly_label,
-            "risk_score": round(risk_score, 2)
+            "anomaly_label": anomaly_label
         })
 
     random.shuffle(employees)
@@ -224,9 +220,7 @@ def generate_dataset(num_employees=5000, days=30):
                 "E": e,
                 "A": a,
                 "N": n,
-                "risk_score": emp['risk_score'],
-                "anomaly_label": emp['anomaly_label'],
-                "risk_profile": emp['risk_profile']
+                "anomaly_label": emp['anomaly_label']
             })
 
     df = pd.DataFrame(records)
@@ -251,8 +245,6 @@ def main():
     print("Total records:", len(df))
     print("Unique employees:", df['user_id'].nunique())
     print("Date range:", df['date'].min(), "to", df['date'].max())
-    print("Risk distribution:")
-    print(df['risk_profile'].value_counts())
     print("\n✅ Dataset saved to:", output_path)
     print("File size:", round(output_path.stat().st_size / (1024 * 1024), 2), "MB")
 

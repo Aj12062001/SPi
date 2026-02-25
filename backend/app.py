@@ -1101,7 +1101,17 @@ async def send_sms_alert(request: SMSAlertRequest):
 async def send_email_alert(request: EmailAlertRequest):
     smtp_config = _get_smtp_config()
     request_from_email = (request.from_email or "").strip()
-    effective_from_email = _normalize_email_address(request_from_email) if request_from_email else smtp_config.get("from_email", "")
+
+    configured_from_email = ""
+    smtp_from = (smtp_config.get("from_email") or "").strip()
+    smtp_username = (smtp_config.get("username") or "").strip()
+    if smtp_from:
+        configured_from_email = _normalize_email_address(smtp_from)
+    elif smtp_username and "@" in smtp_username:
+        configured_from_email = _normalize_email_address(smtp_username)
+
+    normalized_request_from = _normalize_email_address(request_from_email) if request_from_email else ""
+    effective_from_email = configured_from_email or normalized_request_from
 
     missing = []
     if not smtp_config.get("host"):
@@ -1115,6 +1125,11 @@ async def send_email_alert(request: EmailAlertRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Email service is not configured. Missing: {', '.join(missing)}"
+        )
+
+    if configured_from_email and normalized_request_from and normalized_request_from.lower() != configured_from_email.lower():
+        print(
+            f"[INFO] Ignoring request from_email '{normalized_request_from}' and using authenticated SMTP sender '{configured_from_email}'"
         )
 
     if not request.alerts:

@@ -201,25 +201,8 @@ def generate_comprehensive_dataset(num_employees=100, days=30):
             A = random.randint(10, 50)  # Agreeableness
             N = random.randint(10, 50)  # Neuroticism
             
-            # Calculate risk score
-            risk_factors = [
-                night_logins * 5,
-                usb_connect * 3,
-                file_deleted * 4,
-                file_downloaded * 2,
-                sensitive_file_count * 6,
-                external_mails * 1.5,
-                (login_count - 5) * 1 if login_count > 5 else 0
-            ]
-            
-            base_risk = sum(risk_factors)
-            
-            # Add some randomness
-            risk_score = base_risk + random.uniform(-10, 10)
-            risk_score = max(0, min(100, risk_score))
-            
             # Anomaly label (1 = normal, -1 = anomaly)
-            anomaly_label = -1 if risk_score > 65 or sensitive_file_count > 5 else 1
+            anomaly_label = -1 if sensitive_file_count > 5 else 1
             
             # Create record
             record = {
@@ -258,9 +241,7 @@ def generate_comprehensive_dataset(num_employees=100, days=30):
                 'E': E,
                 'A': A,
                 'N': N,
-                'risk_score': round(risk_score, 2),
-                'anomaly_label': anomaly_label,
-                'risk_profile': emp['risk_profile']
+                'anomaly_label': anomaly_label
             }
             
             data.append(record)
@@ -280,8 +261,6 @@ print(f"Dataset generated successfully!")
 print(f"Total records: {len(df)}")
 print(f"Unique employees: {df['user_id'].nunique()}")
 print(f"Date range: {df['date'].min()} to {df['date'].max()}")
-print(f"Risk distribution:")
-print(df['risk_profile'].value_counts())
 print(f"\nSample records:")
 print(df.head())
 print(f"\nDataset saved to: {output_file}")
