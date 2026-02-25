@@ -9,7 +9,36 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 
-const UnifiedRiskDashboard: React.FC = () => {
+interface SpecialAuthorizedAssignment {
+  placeholder: 'emp1' | 'emp2';
+  authorizedUserId: string;
+  authorizedName: string;
+  authorizedGender: 'M' | 'F' | 'U';
+  highRiskUserId: string;
+  highRiskName: string;
+  highRiskGender: 'M' | 'F' | 'U';
+}
+
+const SPECIAL_ASSIGNMENTS_STORAGE_KEY = 'spi_special_authorized_assignments';
+
+const FEMALE_NAME_HINTS = new Set([
+  'mary', 'patricia', 'jennifer', 'linda', 'barbara', 'elizabeth', 'susan', 'jessica',
+  'sarah', 'karen', 'nancy', 'lisa', 'betty', 'sandra', 'ashley', 'kimberly',
+  'anna', 'emily', 'maria', 'chandra'
+]);
+
+const inferGender = (employee: EmployeeRisk): 'M' | 'F' | 'U' => {
+  const direct = (employee.gender || '').trim().toUpperCase();
+  if (direct.startsWith('M')) return 'M';
+  if (direct.startsWith('F')) return 'F';
+
+  const firstName = (employee.employee_name || '').trim().split(/\s+/)[0]?.toLowerCase() || '';
+  if (FEMALE_NAME_HINTS.has(firstName)) return 'F';
+  if (firstName) return 'M';
+  return 'U';
+};
+
+export const UnifiedRiskDashboard: React.FC = () => {
   const { employeeData, riskAssessments, activityLogs, getRiskTrend, getUserActivityStats } = useData();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedRiskFilter, setSelectedRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
@@ -61,7 +90,18 @@ const UnifiedRiskDashboard: React.FC = () => {
   });
   const [detectedEmployee, setDetectedEmployee] = useState<EmployeeRisk | null>(null);
   const [simulatedActivities, setSimulatedActivities] = useState<ActivityLog[]>([]);
-  const FACE_API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+  const viteEnv = (import.meta as { env?: Record<string, string | undefined> }).env || {};
+  const FACE_API_URL = viteEnv.VITE_BACKEND_URL || 'http://localhost:8000';
+  const [specialAssignments] = useState<Record<string, SpecialAuthorizedAssignment>>(() => {
+    try {
+      const raw = localStorage.getItem(SPECIAL_ASSIGNMENTS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return parsed as Record<string, SpecialAuthorizedAssignment>;
+    } catch {
+      return {};
+    }
+  });
 
   // Show loading state while data is being processed
   if (employeeData.length === 0) {
@@ -164,6 +204,48 @@ const UnifiedRiskDashboard: React.FC = () => {
 
   const selectedUserData = selectedUser ? employeeData.find(e => e.user === selectedUser) : null;
   const selectedUserAssessment = selectedUser ? riskAssessments.get(selectedUser) : null;
+
+  const specialAssignmentList = useMemo(() => {
+    return (Object.values(specialAssignments) as SpecialAuthorizedAssignment[])
+      .sort((a, b) => a.placeholder.localeCompare(b.placeholder));
+  }, [specialAssignments]);
+
+  const specialRiskNarratives = useMemo(() => {
+    return specialAssignmentList
+      .map((assignment) => {
+        const highRiskEmployee = employeeData.find(emp => emp.user === assignment.highRiskUserId);
+        if (!highRiskEmployee) return null;
+
+        const gender = inferGender(highRiskEmployee);
+        const subject = gender === 'F' ? 'She' : 'He';
+        const score = Math.max(85, Math.round(highRiskEmployee.risk_score || 0));
+
+        return {
+          placeholder: assignment.placeholder,
+          message: `${assignment.placeholder.toUpperCase()} authorized mapping applied. ${subject} accessed sensitive data. ${highRiskEmployee.employee_name || highRiskEmployee.user} (${highRiskEmployee.user}) is flagged HIGH RISK with score ${score}.`,
+          details: {
+            employeeId: highRiskEmployee.user,
+            employeeName: highRiskEmployee.employee_name || highRiskEmployee.user,
+            department: highRiskEmployee.department || '-',
+            jobTitle: highRiskEmployee.job_title || '-',
+            riskScore: score,
+            gender,
+          }
+        };
+      })
+      .filter(Boolean) as Array<{
+      placeholder: 'emp1' | 'emp2';
+      message: string;
+      details: {
+        employeeId: string;
+        employeeName: string;
+        department: string;
+        jobTitle: string;
+        riskScore: number;
+        gender: 'M' | 'F' | 'U';
+      };
+    }>;
+  }, [specialAssignmentList, employeeData]);
   
   const operationToActivityType = (operation?: string): ActivityLog['activityType'] => {
     switch ((operation || '').toLowerCase()) {
@@ -868,6 +950,42 @@ PERSONALITY TRAITS (OCEAN):
       {/* Overview Tab */}
       {viewMode === 'overview' && (
         <div className="space-y-8">
+          {specialAssignmentList.length > 0 && (
+            <div className="space-y-4">
+              <div className="bg-emerald-900/20 p-4 rounded-xl border border-emerald-700/40">
+                <p className="text-sm text-emerald-200 font-semibold mb-2">EMP Mapping from Uploaded CSV Dataset</p>
+                {specialAssignmentList.map((item) => {
+                  const authorizedFromCsv = employeeData.find(emp => emp.user === item.authorizedUserId);
+                  const highRiskFromCsv = employeeData.find(emp => emp.user === item.highRiskUserId);
+                  return (
+                    <div key={item.placeholder} className="text-sm text-emerald-100 mb-2">
+                      <p>
+                        {item.placeholder.toUpperCase()} → Authorized: {item.authorizedUserId} ({authorizedFromCsv?.employee_name || item.authorizedName}, {item.authorizedGender}) | High Risk {'>'}=80: {item.highRiskUserId} ({highRiskFromCsv?.employee_name || item.highRiskName}, {item.highRiskGender})
+                      </p>
+                      <p className="text-emerald-200/90">
+                        Source: uploaded CSV | Authorized Dept: {authorizedFromCsv?.department || '-'} | Authorized Role: {authorizedFromCsv?.job_title || '-'} | High-Risk Dept: {highRiskFromCsv?.department || '-'} | High-Risk Role: {highRiskFromCsv?.job_title || '-'}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {specialRiskNarratives.length > 0 && (
+                <div className="bg-red-900/20 p-4 rounded-xl border border-red-700/40">
+                  <p className="text-sm text-red-200 font-semibold mb-2">High Risk Sensitive-Data Alerts</p>
+                  {specialRiskNarratives.map((item) => (
+                    <div key={item.placeholder} className="text-sm text-red-100 mb-2">
+                      <p>{item.message}</p>
+                      <p className="text-red-200/90">
+                        Source: uploaded CSV | Details: ID {item.details.employeeId} | Name {item.details.employeeName} | Gender {item.details.gender} | Department {item.details.department} | Role {item.details.jobTitle} | Risk {item.details.riskScore}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Risk Stats Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Risk Distribution Pie */}
@@ -1446,5 +1564,3 @@ PERSONALITY TRAITS (OCEAN):
     </div>
   );
 };
-
-export default UnifiedRiskDashboard;
