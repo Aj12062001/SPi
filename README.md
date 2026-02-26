@@ -188,6 +188,7 @@ SPi-main/
 - **SPY_DETECTION_GUIDE.md** - Comprehensive spy detection usage
 - **CCTV_FACE_DETECTION_GUIDE.md** - CCTV integration details
 - **DATASET_GUIDE.md** - Sample data structure and format
+- **RESEARCH_REFERENCES.md** - Paper-to-module mapping and rationale
 - **FEATURE_CHECKLIST.md** - Complete feature list
 
 ---
