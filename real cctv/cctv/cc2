@@ -1,0 +1,20 @@
+import cv2
+import os
+
+frames_path = r"D:\Main File store\Ajin\Project\frames"
+output_video = r"D:\Main File store\Ajin\Project\cctv_output.mp4"
+
+frames = sorted([f for f in os.listdir(frames_path) if f.endswith(".jpg")])
+
+first_frame = cv2.imread(os.path.join(frames_path, frames[0]))
+height, width, _ = first_frame.shape
+
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+video = cv2.VideoWriter(output_video, fourcc, 10, (width, height))
+
+for frame in frames:
+    img = cv2.imread(os.path.join(frames_path, frame))
+    video.write(img)
+
+video.release()
+print("CCTV video created")
