@@ -195,7 +195,7 @@ export const UnifiedRiskDashboard: React.FC = () => {
   const riskDistribution = useMemo(() => {
     return [
       { name: 'CRITICAL', value: riskCounts.critical, color: '#ef4444' },
-      { name: 'HIGH', value: riskCounts.high, color: '#f59e0b' },
+      { name: 'HIGH', value: riskCounts.high, color: '#3b82f6' },
       { name: 'MEDIUM', value: riskCounts.medium, color: '#fbbf24' },
       { name: 'LOW', value: riskCounts.low, color: '#10b981' }
     ];

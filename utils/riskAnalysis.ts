@@ -26,13 +26,15 @@ export const calculateRiskScore = (employee: EmployeeRisk): number => {
   const anomalyBoost = employee.anomaly_label === -1 ? 10 : 0;
 
   const score = modelRisk * 0.2 + fileActivityRisk + usbActivityRisk + nightLoginRisk + loginVolumeRisk + dbSessionRisk + dbQueryRisk + dbWriteRisk + anomalyBoost;
+  // Preserve critical model risk signals so high-risk assignments stay critical in all views.
+  const floorScore = modelRisk >= 80 ? modelRisk : 0;
 
   // Debug first few employees
   if (Math.random() < 0.01) {
     console.log(`📊 Risk Score for ${employee.user}: ${score} (modelRisk=${modelRisk}, fileRisk=${fileActivityRisk}, usbRisk=${usbActivityRisk})`);
   }
 
-  return Math.round(score * 100) / 100;
+  return Math.round(Math.max(score, floorScore) * 100) / 100;
 };
 
 /**

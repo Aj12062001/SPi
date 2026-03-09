@@ -1,0 +1,597 @@
+\documentclass[aspectratio=169]{beamer}
+
+% -------------------- Packages --------------------
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{times}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+
+% -------------------- Theme --------------------
+\usetheme{Boadilla}
+\usecolortheme{rose}
+
+% -------------------- Custom Colors --------------------
+\definecolor{securityblue}{RGB}{30, 55, 110}
+\definecolor{accentblue}{RGB}{52, 152, 219}
+\definecolor{darkred}{RGB}{180, 30, 30}
+
+\setbeamercolor{structure}{fg=securityblue}
+\setbeamercolor{palette primary}{bg=securityblue, fg=white}
+\setbeamercolor{palette secondary}{bg=accentblue, fg=white}
+\setbeamercolor{palette tertiary}{bg=securityblue, fg=white}
+\setbeamercolor{frametitle}{bg=securityblue, fg=white}
+\setbeamercolor{alerted text}{fg=darkred}
+
+\setbeamertemplate{caption}[numbered]
+
+% -------------------- Footer --------------------
+\setbeamertemplate{footline}{
+  \leavevmode
+  \hbox{
+  \begin{beamercolorbox}[wd=\paperwidth, ht=3ex, dp=1.2ex, leftskip=0.4cm, rightskip=0.4cm]{palette primary}
+  \color{white}\scriptsize
+  SPi: AI-Based Insider Threat Detection System \;|\; AJIN JOSE - Roll No: 07 \hfill \insertframenumber/17
+  \end{beamercolorbox}}
+}
+
+% -------------------- Title Page Setup --------------------
+\title{SPi: AI-Based Insider Threat Detection System}
+\author{AJIN JOSE \\ Roll No: 07 \\ Reg No: KTE24MCA--2008}
+\institute{Rajiv Gandhi Institute of Technology (RIT), Kottayam \\ Department of Computer Applications}
+\date{\today}
+
+\begin{document}
+
+% -------------------- TITLE SLIDE --------------------
+
+\begin{frame}[plain]
+\centering
+\vspace{0.5cm}
+\begin{beamercolorbox}[sep=12pt,center,shadow=true,rounded=true]{palette primary}
+\fontsize{18pt}{20pt}\selectfont 
+\textbf{SPi: AI-Based Insider Threat Detection System}
+\end{beamercolorbox}
+
+\vspace{1.5cm}
+{\Large \textbf{AJIN JOSE}}\\[0.3cm]
+{\normalsize Roll No: 07}\\
+{\normalsize Reg No: KTE24MCA--2008}
+
+\vspace{1cm}
+{\small Guided By: Prof. Jincy Kuriakose}\\
+{\small Department of Computer Applications}\\
+{\small Rajiv Gandhi Institute of Technology (RIT), Kottayam}
+
+\vspace{1.5cm}
+{\tiny February 2026}
+\end{frame}
+
+% -------------------- TABLE OF CONTENTS --------------------
+
+\begin{frame}{Table of Contents}
+\tableofcontents
+\end{frame}
+
+% -------------------- SECTION: INTRODUCTION --------------------
+
+\section{Introduction \& Objectives}
+
+\begin{frame}{1. Introduction}
+
+\begin{itemize}
+    \item \textbf{Insider Threats:} Malicious or negligent actions by authorized users
+    \item \textbf{Challenge:} Traditional security systems focus on external attacks
+    \item \textbf{Solution:} Behavioral anomaly detection and risk scoring
+    \vspace{0.3cm}
+    \item \textbf{SPi Integration:}
+    \begin{itemize}
+        \item Digital activity logs (file operations, logins, USB access)
+        \item Physical access records (CCTV, entry/exit logs)
+        \item Machine learning–based anomaly detection (Isolation Forest)
+        \item Dynamic quantitative Risk Score
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{2. Objectives}
+
+\begin{itemize}
+    \item[\checkmark] Identify malicious or negligent activities through behavioral log analysis
+    \vspace{0.2cm}
+    \item[\checkmark] Correlate digital system events with physical access through computer vision
+    \vspace{0.2cm}
+    \item[\checkmark] Apply \textbf{Isolation Forest} techniques to detect deviations from normal behavior
+    \vspace{0.2cm}
+    \item[\checkmark] Support proactive security decisions via \textbf{dynamic risk scoring}
+    \vspace{0.2cm}
+    \item[\checkmark] Provide real-time threat monitoring and alerting dashboard
+    \vspace{0.2cm}
+    \item[\checkmark] Integrate behavioral and CCTV-based detection for comprehensive threat assessment
+\end{itemize}
+
+\end{frame}
+
+% -------------------- SECTION: SYSTEM DESIGN --------------------
+
+\section{System Design \& Architecture}
+
+\begin{frame}{3. System Architecture}
+
+\begin{figure}
+    \centering
+    \includegraphics[height=0.65\textheight]{Untitled Diagram.png} 
+    \caption{Data Flow: Preprocessing to Dashboard}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}{3.1 System Components}
+
+\begin{itemize}
+    \item \textbf{Data Ingestion Layer}
+    \begin{itemize}
+        \item Employee behavioral logs (CSV uploads)
+        \item CCTV video processing
+        \item Face recognition integration
+    \end{itemize}
+    \vspace{0.3cm}
+    \item \textbf{Anomaly Detection Engine}
+    \begin{itemize}
+        \item Isolation Forest algorithm
+        \item Feature normalization
+        \item Risk score calculation
+    \end{itemize}
+    \vspace{0.3cm}
+    \item \textbf{Analytics \& Dashboard}
+    \begin{itemize}
+        \item Risk visualization (scatter plots, distributions)
+        \item Real-time monitoring
+        \item Alert management
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+% -------------------- SECTION: MACHINE LEARNING --------------------
+
+\section{Machine Learning Model}
+
+\begin{frame}{4. Isolation Forest – Core Concept}
+
+\begin{columns}[T]
+
+\begin{column}{0.5\textwidth}
+\begin{itemize}
+    \item \textbf{Unsupervised} anomaly detection
+    \item Random partitioning isolates anomalies faster than normal points
+    \item Anomalies require fewer recursive splits
+    \item Builds multiple random decision trees
+\end{itemize}
+\end{column}
+
+\begin{column}{0.5\textwidth}
+\[
+\text{Path Length} \propto \text{Anomaly Score}
+\]
+
+\vspace{0.5cm}
+\begin{itemize}
+    \item Short path → High anomaly probability
+    \item Long path → Normal behavior
+\end{itemize}
+\end{column}
+
+\end{columns}
+
+\end{frame}
+
+\begin{frame}{5. Isolation Forest – Mathematical Foundation}
+
+\textbf{Expected Path Length (Normalization Factor):}
+
+\[
+c(n) = 2H(n-1) - \frac{2(n-1)}{n}
+\]
+
+{\small Where: $H(n)$ = Harmonic number, $n$ = Total samples}
+
+\vspace{0.5cm}
+
+\textbf{Anomaly Score:}
+
+\[
+s(x,n) = 2^{-\frac{E(h(x))}{c(n)}}
+\]
+
+{\small Where: $E(h(x))$ = Average path length of sample $x$}
+
+\vspace{0.5cm}
+
+\begin{itemize}
+    \item Score range: $[0, 1]$
+    \item $s \approx 1$ → Strong anomaly
+    \item $s \approx 0.5$ → Normal behavior
+    \item $s \approx 0$ → Deep normal instance
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{6. Isolation Forest Algorithm}
+
+\begin{enumerate}
+    \item \textbf{Input:} Dataset $D$ with $n$ samples
+    \vspace{0.2cm}
+    
+    \item \textbf{For each tree:}
+    \begin{itemize}
+        \item Randomly sample subset of data
+        \item Recursively partition using random feature and split value
+        \item Build isolation tree until all points isolated
+    \end{itemize}
+    \vspace{0.2cm}
+    
+    \item \textbf{Compute:} Average path length for each sample across all trees
+    \vspace{0.2cm}
+    
+    \item \textbf{Generate:} Anomaly score using normalization formula
+    \vspace{0.2cm}
+    
+    \item \textbf{Output:} Anomaly scores for threshold-based classification
+\end{enumerate}
+
+\end{frame}
+
+% -------------------- SECTION: RISK MODEL --------------------
+
+\section{Risk Scoring Model}
+
+\begin{frame}{7. Risk Score Mathematical Model}
+
+\textbf{Integrated Risk Formula:}
+
+\[
+R = w_1 A_d + w_2 A_p + w_3 B_f
+\]
+
+\vspace{0.3cm}
+
+\textbf{Component Definitions:}
+\begin{itemize}
+    \item $A_d$ = Digital anomaly score (Isolation Forest)
+    \item $A_p$ = Physical access risk (CCTV-based detection)
+    \item $B_f$ = Behavioral frequency factor (anomaly event density)
+\end{itemize}
+
+\vspace{0.3cm}
+
+\textbf{Constraint:}
+\[
+w_1 + w_2 + w_3 = 1
+\]
+
+{\small Default: $w_1 = 0.5$, $w_2 = 0.3$, $w_3 = 0.2$}
+
+\end{frame}
+
+\begin{frame}{8. Digital Anomaly Score}
+
+\textbf{Feature Components:}
+\begin{itemize}
+    \item Login patterns and frequency
+    \item Night-time login activity
+    \item File operations (accessed, modified, deleted, copied)
+    \item USB device connections
+    \item External email communications
+    \item Database access patterns
+\end{itemize}
+
+\vspace{0.3cm}
+
+\textbf{Normalization:}
+\[
+A_d = \frac{\text{ISO Forest Score} - \text{Min}}{\text{Max} - \text{Min}}
+\]
+
+Produces normalized risk scale $[0, 100]$
+
+\end{frame}
+
+\begin{frame}{9. Physical Access Risk}
+
+\textbf{CCTV-Based Risk Assessment:}
+
+\[
+A_p = \frac{\text{Unauthorized Access Events}}{\text{Total Access Attempts}}
+\]
+
+\vspace{0.3cm}
+
+\textbf{Factors Considered:}
+\begin{itemize}
+    \item Unauthorized zone entries
+    \item Detection confidence levels
+    \item Extended presence duration
+    \item After-hours facility access
+    \item Restricted area movements
+\end{itemize}
+
+\vspace{0.3cm}
+
+Higher ratio → Increased suspicious physical movement
+
+\end{frame}
+
+\begin{frame}{10. Behavioral Frequency Factor}
+
+\textbf{Definition:}
+
+\[
+B_f = \frac{\text{Anomalous Events Detected}}{\text{Total Events}}
+\]
+
+\vspace{0.3cm}
+
+\textbf{Examples of Anomalous Events:}
+\begin{itemize}
+    \item Multiple after-hours logins
+    \item Bulk file downloads/deletions
+    \item USB mass storage operations
+    \item External data transfers
+    \item Unusual database queries
+    \item Night-time system access patterns
+\end{itemize}
+
+\vspace{0.3cm}
+
+Captures frequency and persistence of risky activities
+
+\end{frame}
+
+\begin{frame}{11. Risk Level Classification}
+
+\begin{table}
+\centering
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{|c|c|l|}
+\hline
+\textbf{Risk Score Range} & \textbf{Level} & \textbf{Action} \\
+\hline
+0.00 – 0.30 & \textcolor{green!70!black}{\textbf{Low}} & Monitor routine \\
+\hline
+0.31 – 0.60 & \textcolor{orange}{\textbf{Medium}} & Increase monitoring \\
+\hline
+0.61 – 0.80 & \textcolor{blue}{\textbf{High}} & Flag for review \\
+\hline
+0.81 – 1.00 & \textcolor{red}{\textbf{Critical}} & Immediate investigation \\
+\hline
+\end{tabular}
+\end{table}
+
+\vspace{0.5cm}
+System generates \textbf{real-time alerts} when thresholds are exceeded.
+
+\end{frame}
+
+% -------------------- SECTION: IMPLEMENTATION --------------------
+
+\section{Implementation \& Results}
+
+\begin{frame}{12. Implementation Details}
+
+\textbf{Technology Stack:}
+\begin{itemize}
+    \item \textbf{Frontend:} React.js with TypeScript, Tailwind CSS
+    \item \textbf{Backend:} Python Flask/FastAPI
+    \item \textbf{ML Engine:} Scikit-learn (Isolation Forest)
+    \item \textbf{CCTV:} CompreFace API for face recognition
+    \item \textbf{Database:} Local storage with CSV imports
+\end{itemize}
+
+\vspace{0.3cm}
+
+\textbf{Model Configuration:}
+\begin{itemize}
+    \item Isolation Forest: 300 trees
+    \item Contamination parameter: 0.05
+    \item Feature normalization: StandardScaler
+    \item Dataset: CERT Insider Threat (modified)
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{13. Results: Threat Monitoring Dashboard}
+
+\setlength{\columnsep}{12pt}
+
+\begin{columns}[T]
+
+\begin{column}{0.33\textwidth}
+\begin{figure}
+\centering
+\includegraphics[width=\linewidth]{Screenshot 2026-02-15 203629.png}
+\caption{Risk Management Dashboard}
+\end{figure}
+\end{column}
+
+\begin{column}{0.33\textwidth}
+\begin{figure}
+\centering
+\includegraphics[width=\linewidth]{Screenshot 2026-02-15 203620.png}
+\caption{Individual Risk Profile}
+\end{figure}
+\end{column}
+
+\begin{column}{0.33\textwidth}
+\begin{figure}
+\centering
+\includegraphics[width=\linewidth]{Screenshot 2026-02-15 203608.png}
+\caption{Scatter Plot Analysis}
+\end{figure}
+\end{column}
+
+\end{columns}
+
+\end{frame}
+
+\begin{frame}{14. Key Features Implemented}
+
+\begin{itemize}
+    \item [\checkmark] \textbf{Data Ingestion:} CSV upload for behavioral data
+    \vspace{0.2cm}
+    
+    \item [\checkmark] \textbf{CCTV Integration:} Face detection and unauthorized access flagging
+    \vspace{0.2cm}
+    
+    \item [\checkmark] \textbf{Risk Assessment:} Real-time scoring with multi-component analysis
+    \vspace{0.2cm}
+    
+    \item [\checkmark] \textbf{Analytics Dashboard:} Interactive visualizations and correlations
+    \vspace{0.2cm}
+    
+    \item [\checkmark] \textbf{Alert System:} Email/SMS notifications for critical threats
+    \vspace{0.2cm}
+    
+    \item [\checkmark] \textbf{Authorized Face Database:} Special emp1/emp2 mapping for high-risk scenarios
+\end{itemize}
+
+\end{frame}
+
+% -------------------- SECTION: PROJECT PLAN --------------------
+
+\section{Project Timeline}
+
+\begin{frame}{15. Project Plan \& Development Timeline}
+
+\small
+\begin{table}
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{|p{2cm}|p{5.5cm}|p{2cm}|}
+\hline
+\textbf{Phase} & \textbf{Work Items} & \textbf{Status} \\
+\hline
+\textbf{Phase 1} & Literature review, CERT dataset analysis, threat modeling & Completed \\
+\hline
+\textbf{Phase 2} & System architecture, UI design, backend API development & Completed \\
+\hline
+\textbf{Phase 3} & Isolation Forest integration, risk scoring implementation & Completed \\
+\hline
+\textbf{Phase 4} & Face recognition, CCTV correlation, dual-source detection & Completed \\
+\hline
+\textbf{Phase 5} & Testing, documentation, deployment preparation & Pending \\
+\hline
+\end{tabular}
+\caption{Development Timeline Summary}
+\end{table}
+
+\end{frame}
+
+% -------------------- SECTION: CONCLUSION --------------------
+
+\section{Conclusion \& Future Work}
+
+\begin{frame}{16. Conclusion}
+
+\textbf{Achievements:}
+\begin{itemize}
+    \item Integrated digital and physical anomaly detection
+    \item Designed comprehensive mathematical risk scoring framework
+    \item Implemented scalable system for enterprise deployment
+    \item Real-time monitoring with multi-component risk assessment
+\end{itemize}
+
+\vspace{0.4cm}
+
+\textbf{Key Contributions:}
+\begin{itemize}
+    \item Novel correlation between behavioral logs and CCTV analysis
+    \item Weighted risk model addressing multiple threat vectors
+    \item User-friendly dashboard for security analysts
+\end{itemize}
+
+\vspace{0.4cm}
+
+\textbf{Future Enhancements:}
+\begin{itemize}
+    \item Time-series modeling for temporal anomalies
+    \item Deep learning for pattern recognition
+    \item Graph-based relationship analysis
+    \item Multi-organization threat correlation
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{17. Development History}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\textwidth]{Screenshot 2026-02-15 201548.png}
+    \caption{Git Repository Development History and Commits}
+\end{figure}
+
+\end{frame}
+
+% -------------------- BIBLIOGRAPHY --------------------
+
+\section{References}
+
+\begin{frame}{18. Bibliography \& Research References}
+
+\begin{thebibliography}{99}
+
+\bibitem{Liu2008}
+F. T. Liu, K. M. Ting, and Z. H. Zhou, 
+``Isolation Forest,'' 
+\textit{IEEE International Conference on Data Mining (ICDM)}, 
+pp. 413-422, 2008.
+
+\bibitem{Insider2016}
+M. M. Tuor, S. Kaplan, B. Moskovitch, C. Shahar, and A. Feiglin,
+``Challenging the Insider Threat Detection Paradigm Using Extreme Value Theory,''
+\textit{Journal of Cybersecurity}, 
+vol. 2, no. 1, pp. 39-62, 2016.
+
+\bibitem{Chandola2009}
+V. Chandola, A. Banerjee, and V. Kumar,
+``Anomaly Detection: A Survey,''
+\textit{ACM Computing Surveys}, 
+vol. 41, no. 3, pp. 1-58, 2009.
+
+\bibitem{Maxion2010}
+R. A. Maxion and R. E. Rehfuss,
+``Improving User Masquerade Detection and Identification with Hybrid-KNN and Behavioral Knowledge,''
+\textit{International Journal of User Authentication and Authentication}, 
+pp. 123-145, 2010.
+
+\bibitem{Kamran2019}
+K. R. Patel and B. M. Mehta,
+``Insider Threat Detection Using Machine Learning Techniques: A Review,''
+\textit{International Journal of Advanced Trends in Computer Science and Engineering}, 
+vol. 8, no. 3, pp. 567-579, 2019.
+
+\end{thebibliography}
+
+\end{frame}
+
+% -------------------- THANK YOU SLIDE --------------------
+
+\begin{frame}[plain]
+\centering
+\vspace{3cm}
+{\Huge \textbf{Thank You}}
+
+\vspace{1.5cm}
+
+{\Large Questions?}
+
+\vspace{1cm}
+
+{\small AJIN JOSE | Roll No: 07 \\ Rajiv Gandhi Institute of Technology, Kottayam}
+\end{frame}
+
+\end{document}

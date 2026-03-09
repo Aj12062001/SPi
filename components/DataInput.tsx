@@ -62,11 +62,11 @@ const inferGender = (employee: EmployeeRisk): 'M' | 'F' | 'U' => {
 
 const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
   const { setEmployeeData, employeeData } = useData();
-  
+
   // CSV Upload State
   const [csvFile, setCSVFile] = useState<File | null>(null);
   const [csvUploading, setCSVUploading] = useState(false);
-  
+
   // Employee Images State
   const [authorizedImages, setAuthorizedImages] = useState<File[]>([]);
   const [unauthorizedImages, setUnauthorizedImages] = useState<File[]>([]);
@@ -76,11 +76,11 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
   const [unauthorizedSingleId, setUnauthorizedSingleId] = useState('');
   const [authorizedIds, setAuthorizedIds] = useState('');
   const [unauthorizedIds, setUnauthorizedIds] = useState('');
-  
+
   // CCTV Video State
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [framesDir, setFramesDir] = useState('');
-  
+
   // Processing State
   const [processing, setProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
@@ -700,7 +700,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       .join(' | ');
 
     if (mappingSummary) {
-      setProcessingStep(`✅ CSV mapping applied - ${mappingSummary}`);
+      // Intentionally skip processingStep update to avoid UI notifications with selected names.
     }
 
     return mappedIds;
@@ -716,7 +716,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
     try {
       const text = await file.text();
       const employees = parseCSV(text);
-      
+
       if (employees.length === 0) {
         setProcessingStep('❌ No valid employee data found in CSV');
         return;
@@ -741,13 +741,13 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       return file.name.replace(/\.[^/.]+$/, '');
     }
     const parts = relPath.split('/').filter(Boolean);
-    
+
     // For folder/image.jpg -> return folder name (parts[0])
     // For folder/subfolder/image.jpg -> return folder name (parts[0])
     if (parts.length >= 1) {
       return parts[0];  // Always return the TOP-LEVEL folder name
     }
-    
+
     return file.name.replace(/\.[^/.]+$/, '');
   };
 
@@ -831,12 +831,12 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       authorizedImages.forEach((file) => {
         formData.append('authorized_images', file);
       });
-      
+
       // Add authorized IDs
       if (authorizedSingleId.trim()) {
         formData.append('authorized_ids', authorizedSingleId.trim());
       }
-      
+
       // Add individual image IDs if provided
       authorizedImageIds.forEach((id) => {
         if (id) {
@@ -848,12 +848,12 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       unauthorizedImages.forEach((file) => {
         formData.append('unauthorized_images', file);
       });
-      
+
       // Add unauthorized IDs
       if (unauthorizedSingleId.trim()) {
         formData.append('unauthorized_ids', unauthorizedSingleId.trim());
       }
-      
+
       // Add individual image IDs if provided
       unauthorizedImageIds.forEach((id) => {
         if (id) {
@@ -866,7 +866,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
       }
 
       setProcessingStep('🔍 Detecting faces in video...');
-      
+
       const response = await fetch(`${backendUrl}/analyze`, {
         method: 'POST',
         body: formData
@@ -878,32 +878,32 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
         const message = data?.message || data?.detail || `Backend error (${response.status})`;
         throw new Error(message);
       }
-      
+
       // Check for backend error in response
       if (data?.error) {
         throw new Error(data.error);
       }
-      
+
       setProcessingStep('📊 Correlating with risk scores...');
-      
+
       // Backend returns 'cctv_stats' with aggregated detection data
       const cctvStats = data?.cctv_stats || [];
-      
+
       // Combine with risk data from behavioral analysis and CCTV patterns
       const enrichedResults = cctvStats.map((stat: any) => {
         const empData = employeeData.find(emp => emp.user === stat.employee_id);
-        
+
         // Calculate CCTV-based risk factors
         const detectionFrequency = stat.detection_count / (data.total_frames / 10); // Normalize by processed frames
         const frequencyRisk = Math.min(30, detectionFrequency * 100); // High frequency = higher risk
         const unauthorizedBonus = stat.authorized ? 0 : 40; // Unauthorized person detected
         const lowConfidenceRisk = stat.avg_confidence < 0.7 ? 15 : 0; // Low confidence suggests evasion
-        
+
         // Combine behavioral risk with CCTV risk
         const behavioralRisk = empData?.risk_score || 0;
         const cctvRisk = frequencyRisk + unauthorizedBonus + lowConfidenceRisk;
         const combinedRiskScore = Math.min(100, behavioralRisk * 0.6 + cctvRisk * 0.4);
-        
+
         return {
           employeeId: stat.employee_id,
           status: stat.authorized ? 'authorized' : 'unauthorized',
@@ -936,7 +936,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
           source: 'CCTV Detection',
           status: 'critical-cctv'
         }));
-      
+
       const criticalByCsv = employeeData
         .filter(emp => (emp.risk_score || 0) > 80)
         .map(emp => ({
@@ -947,10 +947,10 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
           source: 'CSV Upload',
           status: 'critical-csv'
         }));
-      
+
       const unauthorizedCritical = step3CriticalRiskEntries
         .filter(entry => entry.status === 'unauthorized-input');
-      
+
       // Deduplicate by employee ID
       const criticalRiskMap = new Map<string, any>();
       [...criticalByCctv, ...criticalByCsv, ...unauthorizedCritical].forEach(entry => {
@@ -958,9 +958,9 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
           criticalRiskMap.set(entry.employeeId, entry);
         }
       });
-      
+
       const allCriticalRisk = Array.from(criticalRiskMap.values()).sort((a, b) => b.riskScore - a.riskScore);
-      
+
       // Save to localStorage for Analytics to display
       localStorage.setItem('criticalRiskEntries', JSON.stringify(allCriticalRisk));
 
@@ -1028,15 +1028,15 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
       const highCriticalEntries = Array.from(highCriticalMap.values()).sort((a, b) => b.riskScore - a.riskScore);
       await sendHighCriticalRiskEmail(highCriticalEntries, backendUrl);
-      
+
       if (enrichedResults.length === 0) {
         setProcessingStep('⚠️ Analysis complete - No face matches found. Try adjusting image quality or providing more reference photos.');
       } else {
         setProcessingStep(`✅ CCTV analysis complete! Found ${enrichedResults.length} face match(es).`);
       }
-      
+
       setScanComplete(true);
-      
+
       setTimeout(() => {
         onScanComplete();
       }, 1500);
@@ -1115,7 +1115,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
               <Users size={24} />
               Authorized Employees
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -1188,7 +1188,7 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
               <AlertCircle size={24} />
               Unauthorized Employees (Optional)
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -1310,13 +1310,12 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
       {/* Processing Status */}
       {processingStep && (
-        <div className={`p-4 rounded-xl border ${
-          processingStep.includes('❌')
+        <div className={`p-4 rounded-xl border ${processingStep.includes('❌')
             ? 'bg-red-900/50 border-red-500/30 text-red-200'
             : processingStep.includes('✅')
-            ? 'bg-green-900/50 border-green-500/30 text-green-200'
-            : 'bg-blue-900/50 border-blue-500/30 text-blue-200'
-        } backdrop-blur-md flex items-center gap-3`}>
+              ? 'bg-green-900/50 border-green-500/30 text-green-200'
+              : 'bg-blue-900/50 border-blue-500/30 text-blue-200'
+          } backdrop-blur-md flex items-center gap-3`}>
           {!processingStep.includes('✅') && !processingStep.includes('❌') && (
             <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
           )}
@@ -1326,29 +1325,27 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
 
       {/* SMS Status */}
       {smsStatus && (
-        <div className={`p-4 rounded-xl border backdrop-blur-md ${
-          smsStatus.includes('✅')
+        <div className={`p-4 rounded-xl border backdrop-blur-md ${smsStatus.includes('✅')
             ? 'bg-green-900/50 border-green-500/30 text-green-200'
             : smsStatus.includes('🔄')
-            ? 'bg-blue-900/50 border-blue-500/30 text-blue-200'
-            : smsStatus.includes('ℹ️')
-            ? 'bg-slate-800/60 border-slate-600 text-slate-200'
-            : 'bg-red-900/50 border-red-500/30 text-red-200'
-        }`}>
+              ? 'bg-blue-900/50 border-blue-500/30 text-blue-200'
+              : smsStatus.includes('ℹ️')
+                ? 'bg-slate-800/60 border-slate-600 text-slate-200'
+                : 'bg-red-900/50 border-red-500/30 text-red-200'
+          }`}>
           {smsStatus}
         </div>
       )}
 
       {emailStatus && (
-        <div className={`p-4 rounded-xl border backdrop-blur-md ${
-          emailStatus.includes('✅')
+        <div className={`p-4 rounded-xl border backdrop-blur-md ${emailStatus.includes('✅')
             ? 'bg-green-900/50 border-green-500/30 text-green-200'
             : emailStatus.includes('🔄')
-            ? 'bg-blue-900/50 border-blue-500/30 text-blue-200'
-            : emailStatus.includes('ℹ️')
-            ? 'bg-slate-800/60 border-slate-600 text-slate-200'
-            : 'bg-red-900/50 border-red-500/30 text-red-200'
-        }`}>
+              ? 'bg-blue-900/50 border-blue-500/30 text-blue-200'
+              : emailStatus.includes('ℹ️')
+                ? 'bg-slate-800/60 border-slate-600 text-slate-200'
+                : 'bg-red-900/50 border-red-500/30 text-red-200'
+          }`}>
           {emailStatus}
         </div>
       )}
@@ -1417,21 +1414,19 @@ const DataInput: React.FC<DataInputProps> = ({ onScanComplete }) => {
                   <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/50">
                     <td className="py-3 px-4 text-white">{result.name}</td>
                     <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        result.status === 'authorized' ? 'bg-green-900/50 text-green-300' :
-                        result.status === 'unauthorized' ? 'bg-red-900/50 text-red-300' :
-                        'bg-yellow-900/50 text-yellow-300'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${result.status === 'authorized' ? 'bg-green-900/50 text-green-300' :
+                          result.status === 'unauthorized' ? 'bg-red-900/50 text-red-300' :
+                            'bg-yellow-900/50 text-yellow-300'
+                        }`}>
                         {result.status.toUpperCase()}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-slate-300">{result.confidence?.toFixed(1)}%</td>
                     <td className="py-3 px-4">
-                      <span className={`font-bold ${
-                        result.riskScore >= 60 ? 'text-red-400' :
-                        result.riskScore >= 30 ? 'text-yellow-400' :
-                        'text-green-400'
-                      }`}>
+                      <span className={`font-bold ${result.riskScore >= 60 ? 'text-red-400' :
+                          result.riskScore >= 30 ? 'text-yellow-400' :
+                            'text-green-400'
+                        }`}>
                         {result.riskScore || 0}
                       </span>
                     </td>

@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  ScatterChart, 
-  Scatter, 
-  XAxis, 
-  YAxis, 
-  ZAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell, 
+import {
+  ScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  ZAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
   CartesianGrid,
   Legend,
   BarChart,
@@ -26,7 +26,7 @@ import { useData } from '../DataContext';
 import { AlertTriangle, Shield, Eye } from 'lucide-react';
 
 const Analytics: React.FC = () => {
-  const { employeeData, getRiskTrend } = useData();
+  const { employeeData, riskAssessments, getRiskTrend } = useData();
   const [graphView, setGraphView] = useState<'current' | 'previous'>('current');
   const [selectedCriticalEmployee, setSelectedCriticalEmployee] = useState<any>(null);
 
@@ -44,10 +44,13 @@ const Analytics: React.FC = () => {
       storedCctvResults = [];
     }
   }
-  
+
+  const getOverallRisk = (emp: { user: string; risk_score?: number }) =>
+    Number(riskAssessments.get(emp.user)?.overallRiskScore ?? emp.risk_score ?? 0);
+
   const scatterData = employeeData.map(emp => ({
     x: emp.login_count,
-    y: emp.risk_score,
+    y: getOverallRisk(emp),
     id: emp.user,
     usb: emp.usb_count,
     fileOps: (emp.file_deleted || 0) + (emp.file_copied || 0),
@@ -55,7 +58,7 @@ const Analytics: React.FC = () => {
   }));
 
   // Critical Risk Employees (80+) plus unauthorized IDs from CCTV detections
-  const criticalRiskEmployees = employeeData.filter(e => e.risk_score >= 80);
+  const criticalRiskEmployees = employeeData.filter(e => getOverallRisk(e) >= 80);
 
   const cctvCriticalByUser = new Map<string, any>();
   storedCctvResults.forEach((result: any) => {
@@ -104,6 +107,7 @@ const Analytics: React.FC = () => {
   criticalRiskEmployees.forEach(emp => {
     criticalEmployeeMap.set(emp.user, {
       ...emp,
+      risk_score: getOverallRisk(emp),
       unauthorizedAttempts: 0,
       lastUnauthorizedAccess: new Date().toISOString(),
       deniedZones: ['CEO Executive Suite', 'Financial Records Vault', 'Server Room']
@@ -139,7 +143,7 @@ const Analytics: React.FC = () => {
       name: emp.user,
       fileOps: (emp.file_deleted || 0) + (emp.file_copied || 0),
       fileAccess: emp.file_accessed,
-      risk: emp.risk_score
+      risk: getOverallRisk(emp)
     }));
 
   // USB vs Email Activity
@@ -151,7 +155,7 @@ const Analytics: React.FC = () => {
       name: emp.user,
       usb: emp.usb_count,
       externalEmails: emp.external_mails || 0,
-      risk: emp.risk_score
+      risk: getOverallRisk(emp)
     }));
 
   // Night Login Trends
@@ -163,7 +167,7 @@ const Analytics: React.FC = () => {
       name: emp.user,
       nightLogins: emp.night_logins,
       logins: emp.login_count,
-      risk: emp.risk_score
+      risk: getOverallRisk(emp)
     }));
 
   // Behavioral score vs Risk
@@ -171,7 +175,7 @@ const Analytics: React.FC = () => {
     .map(emp => ({
       name: emp.user,
       behavioral: emp.behavioral_score || 50,
-      risk: emp.risk_score,
+      risk: getOverallRisk(emp),
       anomaly: emp.anomaly_label
     }))
     .slice(0, 8);
@@ -245,7 +249,7 @@ const Analytics: React.FC = () => {
           <h3 className="text-2xl font-bold">Login Activity vs Risk Score</h3>
           <p className="text-slate-400 mt-2">Correlation between daily logins (X) and overall risk assessment (Y)</p>
         </div>
-        
+
         <div className="h-[500px] w-full bg-slate-900/50 p-6 rounded-xl border border-slate-700">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 40, right: 40, bottom: 60, left: 80 }}>
@@ -276,7 +280,7 @@ const Analytics: React.FC = () => {
           </ResponsiveContainer>
         </div>
       </div>
-      
+
       {/* USB & Email Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700">
@@ -320,10 +324,10 @@ const Analytics: React.FC = () => {
           <h3 className="text-xl font-bold mb-6">Risk Distribution Summary</h3>
           <div className="space-y-4">
             {[
-              { label: 'Critical Risk (80+)', value: employeeData.filter(e => e.risk_score >= 80).length, color: '#ef4444' },
-              { label: 'High Risk (60-79)', value: employeeData.filter(e => e.risk_score >= 60 && e.risk_score < 80).length, color: '#f97316' },
-              { label: 'Medium Risk (30-59)', value: employeeData.filter(e => e.risk_score >= 30 && e.risk_score < 60).length, color: '#f59e0b' },
-              { label: 'Low Risk (<30)', value: employeeData.filter(e => e.risk_score < 30).length, color: '#10b981' }
+              { label: 'Critical Risk (80+)', value: employeeData.filter(e => getOverallRisk(e) >= 80).length, color: '#ef4444' },
+              { label: 'High Risk (60-79)', value: employeeData.filter(e => getOverallRisk(e) >= 60 && getOverallRisk(e) < 80).length, color: '#f97316' },
+              { label: 'Medium Risk (30-59)', value: employeeData.filter(e => getOverallRisk(e) >= 30 && getOverallRisk(e) < 60).length, color: '#f59e0b' },
+              { label: 'Low Risk (<30)', value: employeeData.filter(e => getOverallRisk(e) < 30).length, color: '#10b981' }
             ].map(item => (
               <div key={item.label}>
                 <div className="flex justify-between mb-2">
@@ -331,9 +335,9 @@ const Analytics: React.FC = () => {
                   <span className="text-white font-bold">{item.value} employees</span>
                 </div>
                 <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full" 
-                    style={{ 
+                  <div
+                    className="h-full"
+                    style={{
                       width: `${(item.value / employeeData.length) * 100}%`,
                       backgroundColor: item.color
                     }}
@@ -365,7 +369,7 @@ const Analytics: React.FC = () => {
             </div>
             <div className="flex justify-between pb-3 border-b border-slate-700">
               <span className="text-slate-400">Avg Risk Score</span>
-              <span className="text-white font-bold">{(employeeData.reduce((a, b) => a + b.risk_score, 0) / employeeData.length).toFixed(1)}</span>
+              <span className="text-white font-bold">{(employeeData.reduce((a, b) => a + getOverallRisk(b), 0) / employeeData.length).toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Anomalies Detected</span>
